@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Café Verün"
+description = "A shared café ordering app for customers, cashiers, and kitchen staff. Customers browse and place orders, cashiers enter counter orders, and the kitchen progresses each order through preparation to ready for handoff."
+version = "1.0.0"
+id = "artifacts/cafe-verun"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19831
+
+[services.development]
+run = "pnpm --filter @workspace/cafe-verun run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cafe-verun", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cafe-verun/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19831"
+BASE_PATH = "/"

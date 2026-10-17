@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: cafe
+    description: Café Verün menu, ordering, and operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,141 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /menu:
+    get:
+      operationId: listMenu
+      tags: [cafe]
+      summary: List available menu items
+      responses:
+        "200":
+          description: Menu items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MenuItem"
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [cafe]
+      summary: List café orders
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/OrderStatus"
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+    post:
+      operationId: createOrder
+      tags: [cafe]
+      summary: Place a customer or cashier order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderInput"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Invalid order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [cafe]
+      summary: Get order details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Order was advanced by another staff member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /orders/{id}/status:
+    patch:
+      operationId: updateOrderStatus
+      tags: [cafe]
+      summary: Advance an order through the kitchen and handoff workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderStatusUpdate"
+      responses:
+        "200":
+          description: Updated order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Invalid status transition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /dashboard-summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [cafe]
+      summary: Get live operational totals and recent orders
+      responses:
+        "200":
+          description: Live café overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +170,85 @@ components:
           type: string
       required:
         - status
+    OrderStatus:
+      type: string
+      enum: [pending, preparing, ready, completed]
+    OrderSource:
+      type: string
+      enum: [customer, cashier]
+    MenuItem:
+      type: object
+      required: [id, name, description, category, price, available]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        price: { type: number }
+        available: { type: boolean }
+    OrderLine:
+      type: object
+      required: [id, menuItemId, name, quantity, unitPrice, lineTotal]
+      properties:
+        id: { type: integer }
+        menuItemId: { type: integer }
+        name: { type: string }
+        quantity: { type: integer }
+        unitPrice: { type: number }
+        lineTotal: { type: number }
+    Order:
+      type: object
+      required: [id, orderNumber, customerName, source, status, items, total, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        orderNumber: { type: string }
+        customerName: { type: string }
+        source: { $ref: "#/components/schemas/OrderSource" }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        note: { type: ["string", "null"] }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrderLine" }
+        total: { type: number }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    OrderItemInput:
+      type: object
+      required: [menuItemId, quantity]
+      properties:
+        menuItemId: { type: integer, minimum: 1 }
+        quantity: { type: integer, minimum: 1, maximum: 50 }
+    OrderInput:
+      type: object
+      required: [customerName, source, items]
+      properties:
+        customerName: { type: string, minLength: 1, maxLength: 120 }
+        source: { $ref: "#/components/schemas/OrderSource" }
+        note: { type: string, maxLength: 500 }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/OrderItemInput" }
+    OrderStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/OrderStatus" }
+    DashboardSummary:
+      type: object
+      required: [pending, preparing, ready, completedToday, revenueToday, recentOrders]
+      properties:
+        pending: { type: integer }
+        preparing: { type: integer }
+        ready: { type: integer }
+        completedToday: { type: integer }
+        revenueToday: { type: number }
+        recentOrders:
+          type: array
+          items: { $ref: "#/components/schemas/Order" }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
 
