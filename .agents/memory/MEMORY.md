@@ -1,0 +1,1 @@
+- [Café Verün role separation](cafe-verun-sites.md) — Customer, kitchen, and cashier workflows must remain on separate sites; paths alone do not enforce API access.

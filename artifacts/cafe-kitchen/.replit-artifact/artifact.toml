@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/kitchen/"
+title = "Café Verün Kitchen"
+description = "A standalone kitchen operations site for Café Verün. Kitchen staff view new tickets, start preparation, and mark orders ready for handoff using the shared café order service."
+version = "1.0.0"
+id = "artifacts/cafe-kitchen"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/kitchen/" ]
+localPort = 22779
+
+[services.development]
+run = "pnpm --filter @workspace/cafe-kitchen run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cafe-kitchen", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cafe-kitchen/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22779"
+BASE_PATH = "/kitchen/"

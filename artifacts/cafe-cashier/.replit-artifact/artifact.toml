@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/cashier/"
+title = "Café Verün Cashier"
+description = "A standalone cashier site for Café Verün. Cashiers place counter orders and complete the handoff when kitchen staff mark an order ready."
+version = "1.0.0"
+id = "artifacts/cafe-cashier"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/cashier/" ]
+localPort = 20094
+
+[services.development]
+run = "pnpm --filter @workspace/cafe-cashier run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cafe-cashier", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cafe-cashier/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20094"
+BASE_PATH = "/cashier/"
