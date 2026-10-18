@@ -1,5 +1,7 @@
 import { createInsertSchema } from "drizzle-zod";
-import { index, numeric, pgEnum, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, numeric, pgEnum, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { appUsersTable } from "./app-users";
+import { branchesTable } from "./branches";
 
 export const orderStatusEnum = pgEnum("order_status", [
   "pending",
@@ -15,6 +17,8 @@ export const ordersTable = pgTable(
   {
     id: serial("id").primaryKey(),
     customerName: text("customer_name").notNull(),
+    branchId: integer("branch_id").references(() => branchesTable.id, { onDelete: "set null" }),
+    customerUserId: integer("customer_user_id").references(() => appUsersTable.id, { onDelete: "set null" }),
     source: orderSourceEnum("source").notNull(),
     status: orderStatusEnum("status").notNull().default("pending"),
     note: text("note"),
@@ -27,6 +31,8 @@ export const ordersTable = pgTable(
   },
   (table) => [
     index("orders_status_created_idx").on(table.status, table.createdAt),
+    index("orders_branch_status_created_idx").on(table.branchId, table.status, table.createdAt),
+    index("orders_customer_created_idx").on(table.customerUserId, table.createdAt),
     index("orders_created_idx").on(table.createdAt),
   ],
 );

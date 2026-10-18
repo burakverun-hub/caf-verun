@@ -13,4 +13,5 @@ export interface OrderLine {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  kitchenInstructions?: string;
 }

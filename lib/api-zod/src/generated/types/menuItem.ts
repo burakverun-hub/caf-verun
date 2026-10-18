@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RecipeIngredient } from './recipeIngredient';
 
 export interface MenuItem {
   id: number;
@@ -13,4 +14,9 @@ export interface MenuItem {
   category: string;
   price: number;
   available: boolean;
+  publicIngredients: string[];
+  allergens: string[];
+  kitchenInstructions: string;
+  archived: boolean;
+  recipe: RecipeIngredient[];
 }

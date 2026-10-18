@@ -18,17 +18,83 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary List available menu items
+ * @summary Get the signed-in user's Café Verün profile
  */
+export const GetAuthMeResponse = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string().email(),
+  "fullName": zod.string(),
+  "role": zod.enum(['customer', 'admin', 'branch_manager', 'cashier', 'kitchen']),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
+  "staffCode": zod.string().nullable(),
+  "active": zod.boolean()
+})
+
+
+/**
+ * @summary List active branches for customer branch selection
+ */
+export const ListBranchesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "address": zod.string(),
+  "phone": zod.string(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListBranchesResponse = zod.array(ListBranchesResponseItem)
+
+
+/**
+ * @summary List the selected branch's available menu
+ */
+
+
+
+export const ListMenuQueryParams = zod.object({
+  "branchId": zod.coerce.number().int().min(1)
+})
+
 export const ListMenuResponseItem = zod.object({
+  "branchId": zod.number().int(),
+  "item": zod.object({
   "id": zod.number().int(),
   "name": zod.string(),
   "description": zod.string(),
   "category": zod.string(),
   "price": zod.number(),
-  "available": zod.boolean()
+  "available": zod.boolean(),
+  "publicIngredients": zod.array(zod.string()),
+  "allergens": zod.array(zod.string())
+}),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "categoryName": zod.string(),
+  "categoryId": zod.number().int().nullable(),
+  "stockAvailable": zod.boolean()
 })
 export const ListMenuResponse = zod.array(ListMenuResponseItem)
+
+
+/**
+ * @summary List categories available at a branch
+ */
+
+
+
+export const ListCategoriesQueryParams = zod.object({
+  "branchId": zod.coerce.number().int().min(1)
+})
+
+export const ListCategoriesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "active": zod.boolean()
+})
+export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
 
 
 /**
@@ -41,6 +107,8 @@ export const ListOrdersQueryParams = zod.object({
 export const ListOrdersResponseItem = zod.object({
   "id": zod.number().int(),
   "orderNumber": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
   "customerName": zod.string(),
   "source": zod.enum(['customer', 'cashier']),
   "status": zod.enum(['pending', 'preparing', 'ready', 'completed']),
@@ -51,7 +119,8 @@ export const ListOrdersResponseItem = zod.object({
   "name": zod.string(),
   "quantity": zod.number().int(),
   "unitPrice": zod.number(),
-  "lineTotal": zod.number()
+  "lineTotal": zod.number(),
+  "kitchenInstructions": zod.string().optional()
 })),
   "total": zod.number(),
   "createdAt": zod.coerce.date(),
@@ -61,8 +130,9 @@ export const ListOrdersResponse = zod.array(ListOrdersResponseItem)
 
 
 /**
- * @summary Place a customer or cashier order
+ * @summary Place a customer or cashier order at a selected or assigned branch
  */
+
 export const createOrderBodyCustomerNameMax = 120;
 
 export const createOrderBodyNoteMax = 500;
@@ -74,8 +144,8 @@ export const createOrderBodyItemsItemQuantityMax = 50;
 
 
 export const CreateOrderBody = zod.object({
-  "customerName": zod.string().min(1).max(createOrderBodyCustomerNameMax),
-  "source": zod.enum(['customer', 'cashier']),
+  "branchId": zod.number().int().min(1),
+  "customerName": zod.string().min(1).max(createOrderBodyCustomerNameMax).optional(),
   "note": zod.string().max(createOrderBodyNoteMax).optional(),
   "items": zod.array(zod.object({
   "menuItemId": zod.number().int().min(1),
@@ -86,6 +156,8 @@ export const CreateOrderBody = zod.object({
 export const CreateOrderResponse = zod.object({
   "id": zod.number().int(),
   "orderNumber": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
   "customerName": zod.string(),
   "source": zod.enum(['customer', 'cashier']),
   "status": zod.enum(['pending', 'preparing', 'ready', 'completed']),
@@ -96,7 +168,8 @@ export const CreateOrderResponse = zod.object({
   "name": zod.string(),
   "quantity": zod.number().int(),
   "unitPrice": zod.number(),
-  "lineTotal": zod.number()
+  "lineTotal": zod.number(),
+  "kitchenInstructions": zod.string().optional()
 })),
   "total": zod.number(),
   "createdAt": zod.coerce.date(),
@@ -114,6 +187,8 @@ export const GetOrderParams = zod.object({
 export const GetOrderResponse = zod.object({
   "id": zod.number().int(),
   "orderNumber": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
   "customerName": zod.string(),
   "source": zod.enum(['customer', 'cashier']),
   "status": zod.enum(['pending', 'preparing', 'ready', 'completed']),
@@ -124,7 +199,8 @@ export const GetOrderResponse = zod.object({
   "name": zod.string(),
   "quantity": zod.number().int(),
   "unitPrice": zod.number(),
-  "lineTotal": zod.number()
+  "lineTotal": zod.number(),
+  "kitchenInstructions": zod.string().optional()
 })),
   "total": zod.number(),
   "createdAt": zod.coerce.date(),
@@ -146,6 +222,8 @@ export const UpdateOrderStatusBody = zod.object({
 export const UpdateOrderStatusResponse = zod.object({
   "id": zod.number().int(),
   "orderNumber": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
   "customerName": zod.string(),
   "source": zod.enum(['customer', 'cashier']),
   "status": zod.enum(['pending', 'preparing', 'ready', 'completed']),
@@ -156,7 +234,8 @@ export const UpdateOrderStatusResponse = zod.object({
   "name": zod.string(),
   "quantity": zod.number().int(),
   "unitPrice": zod.number(),
-  "lineTotal": zod.number()
+  "lineTotal": zod.number(),
+  "kitchenInstructions": zod.string().optional()
 })),
   "total": zod.number(),
   "createdAt": zod.coerce.date(),
@@ -176,6 +255,8 @@ export const GetDashboardSummaryResponse = zod.object({
   "recentOrders": zod.array(zod.object({
   "id": zod.number().int(),
   "orderNumber": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
   "customerName": zod.string(),
   "source": zod.enum(['customer', 'cashier']),
   "status": zod.enum(['pending', 'preparing', 'ready', 'completed']),
@@ -186,12 +267,710 @@ export const GetDashboardSummaryResponse = zod.object({
   "name": zod.string(),
   "quantity": zod.number().int(),
   "unitPrice": zod.number(),
-  "lineTotal": zod.number()
+  "lineTotal": zod.number(),
+  "kitchenInstructions": zod.string().optional()
 })),
   "total": zod.number(),
   "createdAt": zod.coerce.date(),
   "updatedAt": zod.coerce.date()
 }))
 })
+
+
+/**
+ * @summary List all branches for administrators
+ */
+export const ListAdminBranchesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "address": zod.string(),
+  "phone": zod.string(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAdminBranchesResponse = zod.array(ListAdminBranchesResponseItem)
+
+
+/**
+ * @summary Create a branch
+ */
+export const createAdminBranchBodyNameMin = 2;
+export const createAdminBranchBodyNameMax = 100;
+
+export const createAdminBranchBodyAddressMax = 300;
+
+export const createAdminBranchBodyPhoneMax = 40;
+
+
+
+export const CreateAdminBranchBody = zod.object({
+  "name": zod.string().min(createAdminBranchBodyNameMin).max(createAdminBranchBodyNameMax),
+  "address": zod.string().max(createAdminBranchBodyAddressMax),
+  "phone": zod.string().max(createAdminBranchBodyPhoneMax)
+})
+
+export const CreateAdminBranchResponse = zod.object({
+  "id": zod.number().int(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "address": zod.string(),
+  "phone": zod.string(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update or deactivate a branch
+ */
+
+
+
+export const UpdateAdminBranchParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const updateAdminBranchBodyNameMin = 2;
+export const updateAdminBranchBodyNameMax = 100;
+
+export const updateAdminBranchBodyAddressMax = 300;
+
+export const updateAdminBranchBodyPhoneMax = 40;
+
+
+
+export const UpdateAdminBranchBody = zod.object({
+  "name": zod.string().min(updateAdminBranchBodyNameMin).max(updateAdminBranchBodyNameMax).optional(),
+  "address": zod.string().max(updateAdminBranchBodyAddressMax).optional(),
+  "phone": zod.string().max(updateAdminBranchBodyPhoneMax).optional(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateAdminBranchResponse = zod.object({
+  "id": zod.number().int(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "address": zod.string(),
+  "phone": zod.string(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Search and list staff accounts
+ */
+export const listAdminStaffQuerySearchMax = 100;
+
+
+
+export const ListAdminStaffQueryParams = zod.object({
+  "search": zod.coerce.string().max(listAdminStaffQuerySearchMax).optional(),
+  "role": zod.enum(['branch_manager', 'cashier', 'kitchen']).optional()
+})
+
+export const ListAdminStaffResponseItem = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string().email(),
+  "fullName": zod.string(),
+  "role": zod.enum(['branch_manager', 'cashier', 'kitchen']),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
+  "staffCode": zod.string().nullable(),
+  "active": zod.boolean(),
+  "status": zod.enum(['invited', 'active']),
+  "createdAt": zod.coerce.date()
+})
+export const ListAdminStaffResponse = zod.array(ListAdminStaffResponseItem)
+
+
+/**
+ * @summary Create a staff account and send a sign-up invitation
+ */
+export const createAdminStaffBodyFullNameMin = 2;
+export const createAdminStaffBodyFullNameMax = 120;
+
+
+
+
+export const CreateAdminStaffBody = zod.object({
+  "email": zod.string().email(),
+  "fullName": zod.string().min(createAdminStaffBodyFullNameMin).max(createAdminStaffBodyFullNameMax),
+  "role": zod.enum(['branch_manager', 'cashier', 'kitchen']),
+  "branchId": zod.number().int().min(1)
+})
+
+export const CreateAdminStaffResponse = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string().email(),
+  "fullName": zod.string(),
+  "role": zod.enum(['branch_manager', 'cashier', 'kitchen']),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
+  "staffCode": zod.string().nullable(),
+  "active": zod.boolean(),
+  "status": zod.enum(['invited', 'active']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Reassign or deactivate a staff account
+ */
+
+
+
+export const UpdateAdminStaffParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const updateAdminStaffBodyFullNameMin = 2;
+export const updateAdminStaffBodyFullNameMax = 120;
+
+
+
+
+export const UpdateAdminStaffBody = zod.object({
+  "fullName": zod.string().min(updateAdminStaffBodyFullNameMin).max(updateAdminStaffBodyFullNameMax).optional(),
+  "role": zod.enum(['branch_manager', 'cashier', 'kitchen']).optional(),
+  "branchId": zod.number().int().min(1).nullish(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateAdminStaffResponse = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string().email(),
+  "fullName": zod.string(),
+  "role": zod.enum(['branch_manager', 'cashier', 'kitchen']),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
+  "staffCode": zod.string().nullable(),
+  "active": zod.boolean(),
+  "status": zod.enum(['invited', 'active']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List global menu categories
+ */
+export const ListAdminCategoriesResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "active": zod.boolean()
+})
+export const ListAdminCategoriesResponse = zod.array(ListAdminCategoriesResponseItem)
+
+
+/**
+ * @summary Create a global menu category
+ */
+export const createAdminCategoryBodyNameMin = 2;
+export const createAdminCategoryBodyNameMax = 80;
+
+
+
+export const CreateAdminCategoryBody = zod.object({
+  "name": zod.string().min(createAdminCategoryBodyNameMin).max(createAdminCategoryBodyNameMax)
+})
+
+export const CreateAdminCategoryResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "active": zod.boolean()
+})
+
+
+/**
+ * @summary Rename or archive a global menu category
+ */
+
+
+
+export const UpdateAdminCategoryParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const updateAdminCategoryBodyNameMin = 2;
+export const updateAdminCategoryBodyNameMax = 80;
+
+
+
+export const UpdateAdminCategoryBody = zod.object({
+  "name": zod.string().min(updateAdminCategoryBodyNameMin).max(updateAdminCategoryBodyNameMax).optional(),
+  "active": zod.boolean().optional()
+})
+
+export const UpdateAdminCategoryResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "active": zod.boolean()
+})
+
+
+/**
+ * @summary List global product and recipe catalog
+ */
+export const listAdminMenuItemsQuerySearchMax = 100;
+
+
+
+export const ListAdminMenuItemsQueryParams = zod.object({
+  "search": zod.coerce.string().max(listAdminMenuItemsQuerySearchMax).optional(),
+  "includeArchived": zod.coerce.boolean().optional()
+})
+
+export const ListAdminMenuItemsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "publicIngredients": zod.array(zod.string()),
+  "allergens": zod.array(zod.string()),
+  "kitchenInstructions": zod.string(),
+  "archived": zod.boolean(),
+  "recipe": zod.array(zod.object({
+  "ingredientId": zod.number().int(),
+  "ingredientName": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string()
+}))
+})
+export const ListAdminMenuItemsResponse = zod.array(ListAdminMenuItemsResponseItem)
+
+
+/**
+ * @summary Create a global product with public ingredients and kitchen instructions
+ */
+export const createAdminMenuItemBodyNameMin = 2;
+export const createAdminMenuItemBodyNameMax = 120;
+
+export const createAdminMenuItemBodyDescriptionMax = 500;
+
+export const createAdminMenuItemBodyCategoryMin = 2;
+export const createAdminMenuItemBodyCategoryMax = 80;
+
+export const createAdminMenuItemBodyPriceMin = 0;
+
+export const createAdminMenuItemBodyPublicIngredientsItemMax = 120;
+
+export const createAdminMenuItemBodyAllergensItemMax = 80;
+
+export const createAdminMenuItemBodyKitchenInstructionsMax = 2000;
+
+
+export const createAdminMenuItemBodyRecipeItemQuantityExclusiveMin = 0;
+
+
+
+export const CreateAdminMenuItemBody = zod.object({
+  "name": zod.string().min(createAdminMenuItemBodyNameMin).max(createAdminMenuItemBodyNameMax),
+  "description": zod.string().max(createAdminMenuItemBodyDescriptionMax),
+  "category": zod.string().min(createAdminMenuItemBodyCategoryMin).max(createAdminMenuItemBodyCategoryMax),
+  "price": zod.number().min(createAdminMenuItemBodyPriceMin),
+  "publicIngredients": zod.array(zod.string().max(createAdminMenuItemBodyPublicIngredientsItemMax)),
+  "allergens": zod.array(zod.string().max(createAdminMenuItemBodyAllergensItemMax)),
+  "kitchenInstructions": zod.string().max(createAdminMenuItemBodyKitchenInstructionsMax),
+  "recipe": zod.array(zod.object({
+  "ingredientId": zod.number().int().min(1),
+  "quantity": zod.number().gt(createAdminMenuItemBodyRecipeItemQuantityExclusiveMin)
+}))
+})
+
+export const CreateAdminMenuItemResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "publicIngredients": zod.array(zod.string()),
+  "allergens": zod.array(zod.string()),
+  "kitchenInstructions": zod.string(),
+  "archived": zod.boolean(),
+  "recipe": zod.array(zod.object({
+  "ingredientId": zod.number().int(),
+  "ingredientName": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string()
+}))
+})
+
+
+/**
+ * @summary Update or archive a global product and its recipe
+ */
+
+
+
+export const UpdateAdminMenuItemParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const updateAdminMenuItemBodyNameMin = 2;
+export const updateAdminMenuItemBodyNameMax = 120;
+
+export const updateAdminMenuItemBodyDescriptionMax = 500;
+
+export const updateAdminMenuItemBodyCategoryMin = 2;
+export const updateAdminMenuItemBodyCategoryMax = 80;
+
+export const updateAdminMenuItemBodyPriceMin = 0;
+
+export const updateAdminMenuItemBodyPublicIngredientsItemMax = 120;
+
+export const updateAdminMenuItemBodyAllergensItemMax = 80;
+
+export const updateAdminMenuItemBodyKitchenInstructionsMax = 2000;
+
+
+export const updateAdminMenuItemBodyRecipeItemQuantityExclusiveMin = 0;
+
+
+
+export const UpdateAdminMenuItemBody = zod.object({
+  "name": zod.string().min(updateAdminMenuItemBodyNameMin).max(updateAdminMenuItemBodyNameMax).optional(),
+  "description": zod.string().max(updateAdminMenuItemBodyDescriptionMax).optional(),
+  "category": zod.string().min(updateAdminMenuItemBodyCategoryMin).max(updateAdminMenuItemBodyCategoryMax).optional(),
+  "price": zod.number().min(updateAdminMenuItemBodyPriceMin).optional(),
+  "publicIngredients": zod.array(zod.string().max(updateAdminMenuItemBodyPublicIngredientsItemMax)).optional(),
+  "allergens": zod.array(zod.string().max(updateAdminMenuItemBodyAllergensItemMax)).optional(),
+  "kitchenInstructions": zod.string().max(updateAdminMenuItemBodyKitchenInstructionsMax).optional(),
+  "archived": zod.boolean().optional(),
+  "recipe": zod.array(zod.object({
+  "ingredientId": zod.number().int().min(1),
+  "quantity": zod.number().gt(updateAdminMenuItemBodyRecipeItemQuantityExclusiveMin)
+})).optional()
+})
+
+export const UpdateAdminMenuItemResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "publicIngredients": zod.array(zod.string()),
+  "allergens": zod.array(zod.string()),
+  "kitchenInstructions": zod.string(),
+  "archived": zod.boolean(),
+  "recipe": zod.array(zod.object({
+  "ingredientId": zod.number().int(),
+  "ingredientName": zod.string(),
+  "quantity": zod.number(),
+  "unit": zod.string()
+}))
+})
+
+
+/**
+ * @summary List ingredients used by recipes
+ */
+export const ListAdminIngredientsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "unit": zod.string(),
+  "archived": zod.boolean()
+})
+export const ListAdminIngredientsResponse = zod.array(ListAdminIngredientsResponseItem)
+
+
+/**
+ * @summary Add an ingredient and its stock unit
+ */
+export const createAdminIngredientBodyNameMin = 2;
+export const createAdminIngredientBodyNameMax = 100;
+
+export const createAdminIngredientBodyUnitMax = 24;
+
+
+
+export const CreateAdminIngredientBody = zod.object({
+  "name": zod.string().min(createAdminIngredientBodyNameMin).max(createAdminIngredientBodyNameMax),
+  "unit": zod.string().min(1).max(createAdminIngredientBodyUnitMax)
+})
+
+export const CreateAdminIngredientResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "unit": zod.string(),
+  "archived": zod.boolean()
+})
+
+
+/**
+ * @summary Rename or archive an ingredient
+ */
+
+
+
+export const UpdateAdminIngredientParams = zod.object({
+  "id": zod.coerce.number().int().min(1)
+})
+
+export const updateAdminIngredientBodyNameMin = 2;
+export const updateAdminIngredientBodyNameMax = 100;
+
+export const updateAdminIngredientBodyUnitMax = 24;
+
+
+
+export const UpdateAdminIngredientBody = zod.object({
+  "name": zod.string().min(updateAdminIngredientBodyNameMin).max(updateAdminIngredientBodyNameMax).optional(),
+  "unit": zod.string().min(1).max(updateAdminIngredientBodyUnitMax).optional(),
+  "archived": zod.boolean().optional()
+})
+
+export const UpdateAdminIngredientResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "unit": zod.string(),
+  "archived": zod.boolean()
+})
+
+
+/**
+ * @summary Show branch operations and low-stock warnings
+ */
+export const GetManagerOverviewResponse = zod.object({
+  "branch": zod.object({
+  "id": zod.number().int(),
+  "code": zod.string(),
+  "name": zod.string(),
+  "address": zod.string(),
+  "phone": zod.string(),
+  "active": zod.boolean(),
+  "createdAt": zod.coerce.date()
+}),
+  "pendingOrders": zod.number().int(),
+  "preparingOrders": zod.number().int(),
+  "readyOrders": zod.number().int(),
+  "completedToday": zod.number().int(),
+  "revenueToday": zod.number(),
+  "lowStockCount": zod.number().int(),
+  "lowStockItems": zod.array(zod.object({
+  "id": zod.number().int(),
+  "branchId": zod.number().int(),
+  "ingredientId": zod.number().int(),
+  "name": zod.string(),
+  "unit": zod.string(),
+  "quantity": zod.number(),
+  "lowStockThreshold": zod.number(),
+  "isLow": zod.boolean(),
+  "updatedAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary List the assigned branch's menu and global products available to add
+ */
+export const ListManagerMenuResponse = zod.object({
+  "branchId": zod.number().int(),
+  "menuItems": zod.array(zod.object({
+  "branchId": zod.number().int(),
+  "item": zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "publicIngredients": zod.array(zod.string()),
+  "allergens": zod.array(zod.string())
+}),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "categoryName": zod.string(),
+  "categoryId": zod.number().int().nullable(),
+  "stockAvailable": zod.boolean()
+})),
+  "availableProducts": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "publicIngredients": zod.array(zod.string()),
+  "allergens": zod.array(zod.string())
+}))
+})
+
+
+/**
+ * @summary Add a global product to the assigned branch menu or update its branch settings
+ */
+
+
+
+export const UpdateManagerMenuParams = zod.object({
+  "menuItemId": zod.coerce.number().int().min(1)
+})
+
+export const updateManagerMenuBodyPriceMin = 0;
+
+
+
+
+export const UpdateManagerMenuBody = zod.object({
+  "available": zod.boolean(),
+  "price": zod.number().min(updateManagerMenuBodyPriceMin).optional(),
+  "categoryId": zod.number().int().min(1).nullish()
+})
+
+export const UpdateManagerMenuResponse = zod.object({
+  "branchId": zod.number().int(),
+  "item": zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "description": zod.string(),
+  "category": zod.string(),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "publicIngredients": zod.array(zod.string()),
+  "allergens": zod.array(zod.string())
+}),
+  "price": zod.number(),
+  "available": zod.boolean(),
+  "categoryName": zod.string(),
+  "categoryId": zod.number().int().nullable(),
+  "stockAvailable": zod.boolean()
+})
+
+
+/**
+ * @summary Remove a product from the assigned branch menu without deleting its history
+ */
+
+
+
+export const RemoveManagerMenuItemParams = zod.object({
+  "menuItemId": zod.coerce.number().int().min(1)
+})
+
+export const RemoveManagerMenuItemResponse = zod.void()
+
+
+/**
+ * @summary Create a category local to the assigned branch
+ */
+export const createManagerCategoryBodyNameMin = 2;
+export const createManagerCategoryBodyNameMax = 80;
+
+
+
+export const CreateManagerCategoryBody = zod.object({
+  "name": zod.string().min(createManagerCategoryBodyNameMin).max(createManagerCategoryBodyNameMax)
+})
+
+export const CreateManagerCategoryResponse = zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "branchId": zod.number().int().nullable(),
+  "active": zod.boolean()
+})
+
+
+/**
+ * @summary View ingredient stock and low-stock thresholds for the assigned branch
+ */
+export const ListManagerInventoryResponseItem = zod.object({
+  "id": zod.number().int(),
+  "branchId": zod.number().int(),
+  "ingredientId": zod.number().int(),
+  "name": zod.string(),
+  "unit": zod.string(),
+  "quantity": zod.number(),
+  "lowStockThreshold": zod.number(),
+  "isLow": zod.boolean(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListManagerInventoryResponse = zod.array(ListManagerInventoryResponseItem)
+
+
+/**
+ * @summary Review stock receipts, waste, order use, and adjustments
+ */
+export const listManagerInventoryTransactionsQueryLimitDefault = 50;
+export const listManagerInventoryTransactionsQueryLimitMax = 200;
+
+
+
+export const ListManagerInventoryTransactionsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listManagerInventoryTransactionsQueryLimitMax).default(listManagerInventoryTransactionsQueryLimitDefault)
+})
+
+export const ListManagerInventoryTransactionsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "branchId": zod.number().int(),
+  "ingredientId": zod.number().int(),
+  "ingredientName": zod.string(),
+  "unit": zod.string(),
+  "type": zod.enum(['restock', 'waste', 'adjustment', 'order_use']),
+  "quantityDelta": zod.number(),
+  "note": zod.string().nullable(),
+  "orderId": zod.number().int().nullable(),
+  "actorName": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListManagerInventoryTransactionsResponse = zod.array(ListManagerInventoryTransactionsResponseItem)
+
+
+/**
+ * @summary Record a stock receipt, waste, or correction
+ */
+
+export const createManagerInventoryTransactionBodyNoteMax = 300;
+
+export const createManagerInventoryTransactionBodyLowStockThresholdMin = 0;
+
+
+
+export const CreateManagerInventoryTransactionBody = zod.object({
+  "ingredientId": zod.number().int().min(1),
+  "type": zod.enum(['restock', 'waste', 'adjustment']),
+  "quantity": zod.number(),
+  "note": zod.string().max(createManagerInventoryTransactionBodyNoteMax),
+  "lowStockThreshold": zod.number().min(createManagerInventoryTransactionBodyLowStockThresholdMin).optional()
+})
+
+export const CreateManagerInventoryTransactionResponse = zod.object({
+  "id": zod.number().int(),
+  "branchId": zod.number().int(),
+  "ingredientId": zod.number().int(),
+  "ingredientName": zod.string(),
+  "unit": zod.string(),
+  "type": zod.enum(['restock', 'waste', 'adjustment', 'order_use']),
+  "quantityDelta": zod.number(),
+  "note": zod.string().nullable(),
+  "orderId": zod.number().int().nullable(),
+  "actorName": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary View cashiers assigned to the manager's branch
+ */
+export const ListManagerStaffResponseItem = zod.object({
+  "id": zod.number().int(),
+  "email": zod.string().email(),
+  "fullName": zod.string(),
+  "role": zod.enum(['branch_manager', 'cashier', 'kitchen']),
+  "branchId": zod.number().int().nullable(),
+  "branchName": zod.string().nullable(),
+  "staffCode": zod.string().nullable(),
+  "active": zod.boolean(),
+  "status": zod.enum(['invited', 'active']),
+  "createdAt": zod.coerce.date()
+})
+export const ListManagerStaffResponse = zod.array(ListManagerStaffResponseItem)
 
 

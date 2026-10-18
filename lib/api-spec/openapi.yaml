@@ -26,11 +26,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/me:
+    get:
+      operationId: getAuthMe
+      tags: [cafe]
+      summary: Get the signed-in user's Café Verün profile
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Sign-in required
+  /branches:
+    get:
+      operationId: listBranches
+      tags: [cafe]
+      summary: List active branches for customer branch selection
+      responses:
+        "200":
+          description: Active café branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Branch"
   /menu:
     get:
       operationId: listMenu
       tags: [cafe]
-      summary: List available menu items
+      summary: List the selected branch's available menu
+      parameters:
+        - name: branchId
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
       responses:
         "200":
           description: Menu items
@@ -39,7 +74,28 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/MenuItem"
+                  $ref: "#/components/schemas/BranchMenuItem"
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [cafe]
+      summary: List categories available at a branch
+      parameters:
+        - name: branchId
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Active global and branch categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MenuCategory"
   /orders:
     get:
       operationId: listOrders
@@ -63,7 +119,7 @@ paths:
     post:
       operationId: createOrder
       tags: [cafe]
-      summary: Place a customer or cashier order
+      summary: Place a customer or cashier order at a selected or assigned branch
       requestBody:
         required: true
         content:
@@ -161,6 +217,399 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
+  /admin/branches:
+    get:
+      operationId: listAdminBranches
+      tags: [cafe]
+      summary: List all branches for administrators
+      responses:
+        "200":
+          description: All branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Branch" }
+    post:
+      operationId: createAdminBranch
+      tags: [cafe]
+      summary: Create a branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchInput" }
+      responses:
+        "201":
+          description: Created branch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Branch" }
+  /admin/branches/{id}:
+    patch:
+      operationId: updateAdminBranch
+      tags: [cafe]
+      summary: Update or deactivate a branch
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchUpdate" }
+      responses:
+        "200":
+          description: Updated branch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Branch" }
+  /admin/staff:
+    get:
+      operationId: listAdminStaff
+      tags: [cafe]
+      summary: Search and list staff accounts
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, maxLength: 100 }
+        - name: role
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/StaffRole" }
+      responses:
+        "200":
+          description: Staff accounts, including cashier codes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StaffMember" }
+    post:
+      operationId: createAdminStaff
+      tags: [cafe]
+      summary: Create a staff account and send a sign-up invitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffInput" }
+      responses:
+        "201":
+          description: Invited staff account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffMember" }
+  /admin/staff/{id}:
+    patch:
+      operationId: updateAdminStaff
+      tags: [cafe]
+      summary: Reassign or deactivate a staff account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StaffUpdate" }
+      responses:
+        "200":
+          description: Updated staff account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StaffMember" }
+  /admin/categories:
+    get:
+      operationId: listAdminCategories
+      tags: [cafe]
+      summary: List global menu categories
+      responses:
+        "200":
+          description: Global categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MenuCategory" }
+    post:
+      operationId: createAdminCategory
+      tags: [cafe]
+      summary: Create a global menu category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "201":
+          description: Created category
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuCategory" }
+  /admin/categories/{id}:
+    patch:
+      operationId: updateAdminCategory
+      tags: [cafe]
+      summary: Rename or archive a global menu category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryUpdate" }
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuCategory" }
+  /admin/menu-items:
+    get:
+      operationId: listAdminMenuItems
+      tags: [cafe]
+      summary: List global product and recipe catalog
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema: { type: string, maxLength: 100 }
+        - name: includeArchived
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Global menu products and recipes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MenuItem" }
+    post:
+      operationId: createAdminMenuItem
+      tags: [cafe]
+      summary: Create a global product with public ingredients and kitchen instructions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MenuItemInput" }
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuItem" }
+  /admin/menu-items/{id}:
+    patch:
+      operationId: updateAdminMenuItem
+      tags: [cafe]
+      summary: Update or archive a global product and its recipe
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MenuItemUpdate" }
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuItem" }
+  /admin/ingredients:
+    get:
+      operationId: listAdminIngredients
+      tags: [cafe]
+      summary: List ingredients used by recipes
+      responses:
+        "200":
+          description: Ingredient library
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ingredient" }
+    post:
+      operationId: createAdminIngredient
+      tags: [cafe]
+      summary: Add an ingredient and its stock unit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IngredientInput" }
+      responses:
+        "201":
+          description: Created ingredient
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ingredient" }
+  /admin/ingredients/{id}:
+    patch:
+      operationId: updateAdminIngredient
+      tags: [cafe]
+      summary: Rename or archive an ingredient
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IngredientUpdate" }
+      responses:
+        "200":
+          description: Updated ingredient
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ingredient" }
+  /manager/overview:
+    get:
+      operationId: getManagerOverview
+      tags: [cafe]
+      summary: Show branch operations and low-stock warnings
+      responses:
+        "200":
+          description: Branch summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagerOverview" }
+  /manager/menu:
+    get:
+      operationId: listManagerMenu
+      tags: [cafe]
+      summary: List the assigned branch's menu and global products available to add
+      responses:
+        "200":
+          description: Branch menu and catalog options
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManagerMenuResponse" }
+  /manager/menu/{menuItemId}:
+    put:
+      operationId: updateManagerMenu
+      tags: [cafe]
+      summary: Add a global product to the assigned branch menu or update its branch settings
+      parameters:
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchMenuInput" }
+      responses:
+        "200":
+          description: Updated branch menu item
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BranchMenuItem" }
+    delete:
+      operationId: removeManagerMenuItem
+      tags: [cafe]
+      summary: Remove a product from the assigned branch menu without deleting its history
+      parameters:
+        - name: menuItemId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "204":
+          description: Removed from this branch menu
+  /manager/categories:
+    post:
+      operationId: createManagerCategory
+      tags: [cafe]
+      summary: Create a category local to the assigned branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "201":
+          description: Created branch category
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuCategory" }
+  /manager/inventory:
+    get:
+      operationId: listManagerInventory
+      tags: [cafe]
+      summary: View ingredient stock and low-stock thresholds for the assigned branch
+      responses:
+        "200":
+          description: Branch inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InventoryRecord" }
+  /manager/inventory/transactions:
+    get:
+      operationId: listManagerInventoryTransactions
+      tags: [cafe]
+      summary: Review stock receipts, waste, order use, and adjustments
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Inventory audit history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InventoryTransaction" }
+    post:
+      operationId: createManagerInventoryTransaction
+      tags: [cafe]
+      summary: Record a stock receipt, waste, or correction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InventoryTransactionInput" }
+      responses:
+        "201":
+          description: Recorded stock movement
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InventoryTransaction" }
+  /manager/staff:
+    get:
+      operationId: listManagerStaff
+      tags: [cafe]
+      summary: View cashiers assigned to the manager's branch
+      responses:
+        "200":
+          description: Cashiers for the assigned branch
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StaffMember" }
 components:
   schemas:
     HealthStatus:
@@ -170,6 +619,96 @@ components:
           type: string
       required:
         - status
+    UserRole:
+      type: string
+      enum: [customer, admin, branch_manager, cashier, kitchen]
+    StaffRole:
+      type: string
+      enum: [branch_manager, cashier, kitchen]
+    UserProfile:
+      type: object
+      required: [id, email, fullName, role, branchId, branchName, staffCode, active]
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        role: { $ref: "#/components/schemas/UserRole" }
+        branchId: { type: ["integer", "null"] }
+        branchName: { type: ["string", "null"] }
+        staffCode: { type: ["string", "null"] }
+        active: { type: boolean }
+    Branch:
+      type: object
+      required: [id, code, name, address, phone, active, createdAt]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    BranchInput:
+      type: object
+      required: [name, address, phone]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        address: { type: string, maxLength: 300 }
+        phone: { type: string, maxLength: 40 }
+    BranchUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        address: { type: string, maxLength: 300 }
+        phone: { type: string, maxLength: 40 }
+        active: { type: boolean }
+    StaffMember:
+      type: object
+      required: [id, email, fullName, role, branchId, branchName, staffCode, active, status, createdAt]
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        role: { $ref: "#/components/schemas/StaffRole" }
+        branchId: { type: ["integer", "null"] }
+        branchName: { type: ["string", "null"] }
+        staffCode: { type: ["string", "null"] }
+        active: { type: boolean }
+        status: { type: string, enum: [invited, active] }
+        createdAt: { type: string, format: date-time }
+    StaffInput:
+      type: object
+      required: [email, fullName, role, branchId]
+      properties:
+        email: { type: string, format: email }
+        fullName: { type: string, minLength: 2, maxLength: 120 }
+        role: { $ref: "#/components/schemas/StaffRole" }
+        branchId: { type: integer, minimum: 1 }
+    StaffUpdate:
+      type: object
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 120 }
+        role: { $ref: "#/components/schemas/StaffRole" }
+        branchId: { type: ["integer", "null"], minimum: 1 }
+        active: { type: boolean }
+    MenuCategory:
+      type: object
+      required: [id, name, branchId, active]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        branchId: { type: ["integer", "null"] }
+        active: { type: boolean }
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+    CategoryUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        active: { type: boolean }
     OrderStatus:
       type: string
       enum: [pending, preparing, ready, completed]
@@ -178,7 +717,7 @@ components:
       enum: [customer, cashier]
     MenuItem:
       type: object
-      required: [id, name, description, category, price, available]
+      required: [id, name, description, category, price, available, publicIngredients, allergens, kitchenInstructions, archived, recipe]
       properties:
         id: { type: integer }
         name: { type: string }
@@ -186,6 +725,186 @@ components:
         category: { type: string }
         price: { type: number }
         available: { type: boolean }
+        publicIngredients:
+          type: array
+          items: { type: string }
+        allergens:
+          type: array
+          items: { type: string }
+        kitchenInstructions: { type: string }
+        archived: { type: boolean }
+        recipe:
+          type: array
+          items: { $ref: "#/components/schemas/RecipeIngredient" }
+    PublicMenuItem:
+      type: object
+      required: [id, name, description, category, price, available, publicIngredients, allergens]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string }
+        category: { type: string }
+        price: { type: number }
+        available: { type: boolean }
+        publicIngredients:
+          type: array
+          items: { type: string }
+        allergens:
+          type: array
+          items: { type: string }
+    BranchMenuItem:
+      type: object
+      required: [branchId, item, price, available, categoryName, categoryId, stockAvailable]
+      properties:
+        branchId: { type: integer }
+        item: { $ref: "#/components/schemas/PublicMenuItem" }
+        price: { type: number }
+        available: { type: boolean }
+        categoryName: { type: string }
+        categoryId: { type: ["integer", "null"] }
+        stockAvailable: { type: boolean }
+    ManagerMenuResponse:
+      type: object
+      required: [branchId, menuItems, availableProducts]
+      properties:
+        branchId: { type: integer }
+        menuItems:
+          type: array
+          items: { $ref: "#/components/schemas/BranchMenuItem" }
+        availableProducts:
+          type: array
+          items: { $ref: "#/components/schemas/PublicMenuItem" }
+    BranchMenuInput:
+      type: object
+      required: [available]
+      properties:
+        available: { type: boolean }
+        price: { type: number, minimum: 0 }
+        categoryId: { type: ["integer", "null"], minimum: 1 }
+    Ingredient:
+      type: object
+      required: [id, name, unit, archived]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        unit: { type: string }
+        archived: { type: boolean }
+    IngredientInput:
+      type: object
+      required: [name, unit]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        unit: { type: string, minLength: 1, maxLength: 24 }
+    IngredientUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        unit: { type: string, minLength: 1, maxLength: 24 }
+        archived: { type: boolean }
+    RecipeIngredient:
+      type: object
+      required: [ingredientId, ingredientName, quantity, unit]
+      properties:
+        ingredientId: { type: integer }
+        ingredientName: { type: string }
+        quantity: { type: number }
+        unit: { type: string }
+    RecipeIngredientInput:
+      type: object
+      required: [ingredientId, quantity]
+      properties:
+        ingredientId: { type: integer, minimum: 1 }
+        quantity: { type: number, exclusiveMinimum: 0 }
+    MenuItemInput:
+      type: object
+      required: [name, description, category, price, publicIngredients, allergens, kitchenInstructions, recipe]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        description: { type: string, maxLength: 500 }
+        category: { type: string, minLength: 2, maxLength: 80 }
+        price: { type: number, minimum: 0 }
+        publicIngredients:
+          type: array
+          items: { type: string, maxLength: 120 }
+        allergens:
+          type: array
+          items: { type: string, maxLength: 80 }
+        kitchenInstructions: { type: string, maxLength: 2000 }
+        recipe:
+          type: array
+          items: { $ref: "#/components/schemas/RecipeIngredientInput" }
+    MenuItemUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        description: { type: string, maxLength: 500 }
+        category: { type: string, minLength: 2, maxLength: 80 }
+        price: { type: number, minimum: 0 }
+        publicIngredients:
+          type: array
+          items: { type: string, maxLength: 120 }
+        allergens:
+          type: array
+          items: { type: string, maxLength: 80 }
+        kitchenInstructions: { type: string, maxLength: 2000 }
+        archived: { type: boolean }
+        recipe:
+          type: array
+          items: { $ref: "#/components/schemas/RecipeIngredientInput" }
+    InventoryRecord:
+      type: object
+      required: [id, branchId, ingredientId, name, unit, quantity, lowStockThreshold, isLow, updatedAt]
+      properties:
+        id: { type: integer }
+        branchId: { type: integer }
+        ingredientId: { type: integer }
+        name: { type: string }
+        unit: { type: string }
+        quantity: { type: number }
+        lowStockThreshold: { type: number }
+        isLow: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+    InventoryTransactionType:
+      type: string
+      enum: [restock, waste, adjustment, order_use]
+    InventoryTransaction:
+      type: object
+      required: [id, branchId, ingredientId, ingredientName, unit, type, quantityDelta, note, orderId, actorName, createdAt]
+      properties:
+        id: { type: integer }
+        branchId: { type: integer }
+        ingredientId: { type: integer }
+        ingredientName: { type: string }
+        unit: { type: string }
+        type: { $ref: "#/components/schemas/InventoryTransactionType" }
+        quantityDelta: { type: number }
+        note: { type: ["string", "null"] }
+        orderId: { type: ["integer", "null"] }
+        actorName: { type: string }
+        createdAt: { type: string, format: date-time }
+    InventoryTransactionInput:
+      type: object
+      required: [ingredientId, type, quantity, note]
+      properties:
+        ingredientId: { type: integer, minimum: 1 }
+        type: { type: string, enum: [restock, waste, adjustment] }
+        quantity: { type: number, not: { enum: [0] } }
+        note: { type: string, maxLength: 300 }
+        lowStockThreshold: { type: number, minimum: 0 }
+    ManagerOverview:
+      type: object
+      required: [branch, pendingOrders, preparingOrders, readyOrders, completedToday, revenueToday, lowStockCount, lowStockItems]
+      properties:
+        branch: { $ref: "#/components/schemas/Branch" }
+        pendingOrders: { type: integer }
+        preparingOrders: { type: integer }
+        readyOrders: { type: integer }
+        completedToday: { type: integer }
+        revenueToday: { type: number }
+        lowStockCount: { type: integer }
+        lowStockItems:
+          type: array
+          items: { $ref: "#/components/schemas/InventoryRecord" }
     OrderLine:
       type: object
       required: [id, menuItemId, name, quantity, unitPrice, lineTotal]
@@ -196,12 +915,15 @@ components:
         quantity: { type: integer }
         unitPrice: { type: number }
         lineTotal: { type: number }
+        kitchenInstructions: { type: string }
     Order:
       type: object
-      required: [id, orderNumber, customerName, source, status, items, total, createdAt, updatedAt]
+      required: [id, orderNumber, branchId, branchName, customerName, source, status, items, total, createdAt, updatedAt]
       properties:
         id: { type: integer }
         orderNumber: { type: string }
+        branchId: { type: ["integer", "null"] }
+        branchName: { type: ["string", "null"] }
         customerName: { type: string }
         source: { $ref: "#/components/schemas/OrderSource" }
         status: { $ref: "#/components/schemas/OrderStatus" }
@@ -220,10 +942,10 @@ components:
         quantity: { type: integer, minimum: 1, maximum: 50 }
     OrderInput:
       type: object
-      required: [customerName, source, items]
+      required: [branchId, items]
       properties:
+        branchId: { type: integer, minimum: 1 }
         customerName: { type: string, minLength: 1, maxLength: 120 }
-        source: { $ref: "#/components/schemas/OrderSource" }
         note: { type: string, maxLength: 500 }
         items:
           type: array

@@ -6,15 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { OrderItemInput } from './orderItemInput';
-import type { OrderSource } from './orderSource';
 
 export interface OrderInput {
+  /** @minimum 1 */
+  branchId: number;
   /**
      * @minLength 1
      * @maxLength 120
      */
-  customerName: string;
-  source: OrderSource;
+  customerName?: string;
   /** @maxLength 500 */
   note?: string;
   /** @minItems 1 */

@@ -9,6 +9,151 @@ export interface HealthStatus {
   status: string;
 }
 
+export type UserRole = typeof UserRole[keyof typeof UserRole];
+
+
+export const UserRole = {
+  customer: 'customer',
+  admin: 'admin',
+  branch_manager: 'branch_manager',
+  cashier: 'cashier',
+  kitchen: 'kitchen',
+} as const;
+
+export type StaffRole = typeof StaffRole[keyof typeof StaffRole];
+
+
+export const StaffRole = {
+  branch_manager: 'branch_manager',
+  cashier: 'cashier',
+  kitchen: 'kitchen',
+} as const;
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  fullName: string;
+  role: UserRole;
+  /** @nullable */
+  branchId: number | null;
+  /** @nullable */
+  branchName: string | null;
+  /** @nullable */
+  staffCode: string | null;
+  active: boolean;
+}
+
+export interface Branch {
+  id: number;
+  code: string;
+  name: string;
+  address: string;
+  phone: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface BranchInput {
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  name: string;
+  /** @maxLength 300 */
+  address: string;
+  /** @maxLength 40 */
+  phone: string;
+}
+
+export interface BranchUpdate {
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  name?: string;
+  /** @maxLength 300 */
+  address?: string;
+  /** @maxLength 40 */
+  phone?: string;
+  active?: boolean;
+}
+
+export type StaffMemberStatus = typeof StaffMemberStatus[keyof typeof StaffMemberStatus];
+
+
+export const StaffMemberStatus = {
+  invited: 'invited',
+  active: 'active',
+} as const;
+
+export interface StaffMember {
+  id: number;
+  email: string;
+  fullName: string;
+  role: StaffRole;
+  /** @nullable */
+  branchId: number | null;
+  /** @nullable */
+  branchName: string | null;
+  /** @nullable */
+  staffCode: string | null;
+  active: boolean;
+  status: StaffMemberStatus;
+  createdAt: string;
+}
+
+export interface StaffInput {
+  email: string;
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  fullName: string;
+  role: StaffRole;
+  /** @minimum 1 */
+  branchId: number;
+}
+
+export interface StaffUpdate {
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  fullName?: string;
+  role?: StaffRole;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  branchId?: number | null;
+  active?: boolean;
+}
+
+export interface MenuCategory {
+  id: number;
+  name: string;
+  /** @nullable */
+  branchId: number | null;
+  active: boolean;
+}
+
+export interface CategoryInput {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name: string;
+}
+
+export interface CategoryUpdate {
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  name?: string;
+  active?: boolean;
+}
+
 export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
 
 
@@ -27,6 +172,13 @@ export const OrderSource = {
   cashier: 'cashier',
 } as const;
 
+export interface RecipeIngredient {
+  ingredientId: number;
+  ingredientName: string;
+  quantity: number;
+  unit: string;
+}
+
 export interface MenuItem {
   id: number;
   name: string;
@@ -34,6 +186,209 @@ export interface MenuItem {
   category: string;
   price: number;
   available: boolean;
+  publicIngredients: string[];
+  allergens: string[];
+  kitchenInstructions: string;
+  archived: boolean;
+  recipe: RecipeIngredient[];
+}
+
+export interface PublicMenuItem {
+  id: number;
+  name: string;
+  description: string;
+  category: string;
+  price: number;
+  available: boolean;
+  publicIngredients: string[];
+  allergens: string[];
+}
+
+export interface BranchMenuItem {
+  branchId: number;
+  item: PublicMenuItem;
+  price: number;
+  available: boolean;
+  categoryName: string;
+  /** @nullable */
+  categoryId: number | null;
+  stockAvailable: boolean;
+}
+
+export interface ManagerMenuResponse {
+  branchId: number;
+  menuItems: BranchMenuItem[];
+  availableProducts: PublicMenuItem[];
+}
+
+export interface BranchMenuInput {
+  available: boolean;
+  /** @minimum 0 */
+  price?: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  categoryId?: number | null;
+}
+
+export interface Ingredient {
+  id: number;
+  name: string;
+  unit: string;
+  archived: boolean;
+}
+
+export interface IngredientInput {
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 24
+     */
+  unit: string;
+}
+
+export interface IngredientUpdate {
+  /**
+     * @minLength 2
+     * @maxLength 100
+     */
+  name?: string;
+  /**
+     * @minLength 1
+     * @maxLength 24
+     */
+  unit?: string;
+  archived?: boolean;
+}
+
+export interface RecipeIngredientInput {
+  /** @minimum 1 */
+  ingredientId: number;
+  /** @exclusiveMinimum 0 */
+  quantity: number;
+}
+
+export interface MenuItemInput {
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  name: string;
+  /** @maxLength 500 */
+  description: string;
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  category: string;
+  /** @minimum 0 */
+  price: number;
+  /** @items.maxLength 120 */
+  publicIngredients: string[];
+  /** @items.maxLength 80 */
+  allergens: string[];
+  /** @maxLength 2000 */
+  kitchenInstructions: string;
+  recipe: RecipeIngredientInput[];
+}
+
+export interface MenuItemUpdate {
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  name?: string;
+  /** @maxLength 500 */
+  description?: string;
+  /**
+     * @minLength 2
+     * @maxLength 80
+     */
+  category?: string;
+  /** @minimum 0 */
+  price?: number;
+  /** @items.maxLength 120 */
+  publicIngredients?: string[];
+  /** @items.maxLength 80 */
+  allergens?: string[];
+  /** @maxLength 2000 */
+  kitchenInstructions?: string;
+  archived?: boolean;
+  recipe?: RecipeIngredientInput[];
+}
+
+export interface InventoryRecord {
+  id: number;
+  branchId: number;
+  ingredientId: number;
+  name: string;
+  unit: string;
+  quantity: number;
+  lowStockThreshold: number;
+  isLow: boolean;
+  updatedAt: string;
+}
+
+export type InventoryTransactionType = typeof InventoryTransactionType[keyof typeof InventoryTransactionType];
+
+
+export const InventoryTransactionType = {
+  restock: 'restock',
+  waste: 'waste',
+  adjustment: 'adjustment',
+  order_use: 'order_use',
+} as const;
+
+export interface InventoryTransaction {
+  id: number;
+  branchId: number;
+  ingredientId: number;
+  ingredientName: string;
+  unit: string;
+  type: InventoryTransactionType;
+  quantityDelta: number;
+  /** @nullable */
+  note: string | null;
+  /** @nullable */
+  orderId: number | null;
+  actorName: string;
+  createdAt: string;
+}
+
+export type InventoryTransactionInputType = typeof InventoryTransactionInputType[keyof typeof InventoryTransactionInputType];
+
+
+export const InventoryTransactionInputType = {
+  restock: 'restock',
+  waste: 'waste',
+  adjustment: 'adjustment',
+} as const;
+
+export interface InventoryTransactionInput {
+  /** @minimum 1 */
+  ingredientId: number;
+  type: InventoryTransactionInputType;
+  quantity: number;
+  /** @maxLength 300 */
+  note: string;
+  /** @minimum 0 */
+  lowStockThreshold?: number;
+}
+
+export interface ManagerOverview {
+  branch: Branch;
+  pendingOrders: number;
+  preparingOrders: number;
+  readyOrders: number;
+  completedToday: number;
+  revenueToday: number;
+  lowStockCount: number;
+  lowStockItems: InventoryRecord[];
 }
 
 export interface OrderLine {
@@ -43,11 +398,16 @@ export interface OrderLine {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  kitchenInstructions?: string;
 }
 
 export interface Order {
   id: number;
   orderNumber: string;
+  /** @nullable */
+  branchId: number | null;
+  /** @nullable */
+  branchName: string | null;
   customerName: string;
   source: OrderSource;
   status: OrderStatus;
@@ -70,12 +430,13 @@ export interface OrderItemInput {
 }
 
 export interface OrderInput {
+  /** @minimum 1 */
+  branchId: number;
   /**
      * @minLength 1
      * @maxLength 120
      */
-  customerName: string;
-  source: OrderSource;
+  customerName?: string;
   /** @maxLength 500 */
   note?: string;
   /** @minItems 1 */
@@ -99,7 +460,45 @@ export interface Error {
   error: string;
 }
 
+export type ListMenuParams = {
+/**
+ * @minimum 1
+ */
+branchId: number;
+};
+
+export type ListCategoriesParams = {
+/**
+ * @minimum 1
+ */
+branchId: number;
+};
+
 export type ListOrdersParams = {
 status?: OrderStatus;
+};
+
+export type ListAdminStaffParams = {
+/**
+ * @maxLength 100
+ */
+search?: string;
+role?: StaffRole;
+};
+
+export type ListAdminMenuItemsParams = {
+/**
+ * @maxLength 100
+ */
+search?: string;
+includeArchived?: boolean;
+};
+
+export type ListManagerInventoryTransactionsParams = {
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
 };
 
