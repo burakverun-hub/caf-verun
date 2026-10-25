@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/branch-manager/"
+title = "Café Verün Şube Sorumlusu"
+description = "A branch manager website for Café Verün. Managers handle their assigned branch's inventory, low-stock alerts, menu assortment and local categories, plus view cashiers assigned to their branch."
+version = "1.0.0"
+id = "artifacts/cafe-branch-manager"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/branch-manager/" ]
+localPort = 24588
+
+[services.development]
+run = "pnpm --filter @workspace/cafe-branch-manager run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cafe-branch-manager", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cafe-branch-manager/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24588"
+BASE_PATH = "/branch-manager/"

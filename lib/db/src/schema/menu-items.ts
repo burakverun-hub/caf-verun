@@ -14,6 +14,7 @@ export const menuItemsTable = pgTable("menu_items", {
   kitchenInstructions: text("kitchen_instructions").notNull().default(""),
   archived: boolean("archived").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
 export const insertMenuItemSchema = createInsertSchema(menuItemsTable).omit({

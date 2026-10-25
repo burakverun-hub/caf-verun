@@ -220,13 +220,13 @@ async function consumeRecipeStock(
     const stock = stockByIngredient.get(ingredientId)!;
     await tx
       .update(branchInventoryTable)
-      .set({ quantity: String(stock.quantity - needed), updatedAt: new Date() })
+      .set({ quantity: stock.quantity - needed, updatedAt: new Date() })
       .where(eq(branchInventoryTable.id, stock.id));
     await tx.insert(inventoryTransactionsTable).values({
       branchId,
       ingredientId,
       type: "order_use",
-      quantityDelta: String(-needed),
+      quantityDelta: -needed,
       note: `Sipariş CV-${String(orderId).padStart(4, "0")} için`,
       orderId,
       actorUserId,
@@ -390,7 +390,7 @@ router.post(
           menuItemId: item.menuItemId,
           name: item.name,
           quantity: item.quantity,
-          unitPrice: String(item.unitPrice),
+          unitPrice: item.unitPrice,
         })),
       );
       return order.id;

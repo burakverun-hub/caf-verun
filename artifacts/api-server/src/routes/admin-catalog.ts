@@ -300,7 +300,7 @@ router.post(
           name: data.name.trim(),
           description: data.description.trim(),
           category: data.category.trim(),
-          price: String(data.price),
+          price: data.price,
           available: true,
           publicIngredients: data.publicIngredients,
           allergens: data.allergens,
@@ -312,7 +312,7 @@ router.post(
           data.recipe.map((entry) => ({
             menuItemId: item.id,
             ingredientId: entry.ingredientId,
-            quantity: String(entry.quantity),
+            quantity: entry.quantity,
           })),
         );
       }
@@ -364,7 +364,7 @@ router.patch(
           ...(fields.kitchenInstructions
             ? { kitchenInstructions: fields.kitchenInstructions.trim() }
             : {}),
-          ...(fields.price !== undefined ? { price: String(fields.price) } : {}),
+          ...(fields.price !== undefined ? { price: fields.price } : {}),
           updatedAt: new Date(),
         })
         .where(eq(menuItemsTable.id, current.id));
@@ -378,7 +378,7 @@ router.patch(
             recipe.map((entry) => ({
               menuItemId: current.id,
               ingredientId: entry.ingredientId,
-              quantity: String(entry.quantity),
+              quantity: entry.quantity,
             })),
           );
         }

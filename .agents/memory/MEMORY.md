@@ -1,1 +1,1 @@
-- [Café Verün role separation](cafe-verun-sites.md) — Customer, kitchen, and cashier workflows must remain on separate sites; paths alone do not enforce API access.
+- [Café Verün site and catalog boundaries](cafe-verun-sites.md) — Keep five roles on separate sites; admin owns master recipes while branch managers control local assortments and stock.

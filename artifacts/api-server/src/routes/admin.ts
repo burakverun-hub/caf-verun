@@ -1,4 +1,5 @@
 import { clerkClient } from "@clerk/express";
+import { randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { and, desc, eq, ilike, ne, or } from "drizzle-orm";
 import {
@@ -61,7 +62,7 @@ router.post("/admin/branches", requireCafeUser(["admin"]), async (req, res): Pro
     const [created] = await tx
       .insert(branchesTable)
       .values({
-        code: `CV-SB-PENDING-${Date.now()}`,
+        code: `CV-SB-PENDING-${randomUUID()}`,
         name: parsed.data.name.trim(),
         address: parsed.data.address.trim(),
         phone: parsed.data.phone.trim(),
@@ -289,15 +290,25 @@ router.patch(
       return;
     }
 
-    const [updated] = await db
-      .update(appUsersTable)
-      .set({
-        ...parsed.data,
-        ...(parsed.data.fullName ? { fullName: parsed.data.fullName.trim() } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(appUsersTable.id, current.id))
-      .returning();
+    const updated = await db.transaction(async (tx) => {
+      let [user] = await tx
+        .update(appUsersTable)
+        .set({
+          ...parsed.data,
+          ...(parsed.data.fullName ? { fullName: parsed.data.fullName.trim() } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(appUsersTable.id, current.id))
+        .returning();
+      if (user.role === "cashier" && !user.staffCode) {
+        [user] = await tx
+          .update(appUsersTable)
+          .set({ staffCode: `CV-KS-${String(user.id).padStart(5, "0")}` })
+          .where(eq(appUsersTable.id, user.id))
+          .returning();
+      }
+      return user;
+    });
     const [branch] = updated.branchId
       ? await db
           .select({ name: branchesTable.name })

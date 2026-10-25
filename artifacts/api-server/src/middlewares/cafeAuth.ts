@@ -123,6 +123,19 @@ export function requireCafeUser(roles?: CafeRole[]) {
         res.status(403).json({ error: "Hesabınıza henüz bir şube atanmamış." });
         return;
       }
+      if (
+        user.role === "branch_manager" || user.role === "cashier" || user.role === "kitchen"
+      ) {
+        const [branch] = await db
+          .select({ id: branchesTable.id })
+          .from(branchesTable)
+          .where(and(eq(branchesTable.id, user.branchId!), eq(branchesTable.active, true)))
+          .limit(1);
+        if (!branch) {
+          res.status(403).json({ error: "Hesabınızın şubesi kapalı veya devre dışı." });
+          return;
+        }
+      }
 
       res.locals.cafeUser = user;
       next();

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/admin/"
+title = "Café Verün Admin"
+description = "A staff-only administration website for Café Verün. Administrators manage branches, assign branch managers and cashiers, maintain the shared product and recipe catalog, and create staff accounts."
+version = "1.0.0"
+id = "artifacts/cafe-admin"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/admin/" ]
+localPort = 21390
+
+[services.development]
+run = "pnpm --filter @workspace/cafe-admin run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cafe-admin", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cafe-admin/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21390"
+BASE_PATH = "/admin/"

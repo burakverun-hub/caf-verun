@@ -26,14 +26,12 @@ import {
   inventoryTransactionsTable,
   menuCategoriesTable,
   menuItemsTable,
-  orderStatusEnum,
   ordersTable,
   recipeIngredientsTable,
 } from "@workspace/db";
 import { getCafeUser, requireCafeUser } from "../middlewares/cafeAuth";
 
 const router: IRouter = Router();
-type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
 
 function publicProduct(item: typeof menuItemsTable.$inferSelect) {
   return {
@@ -306,7 +304,7 @@ router.put(
         .set({
           available: parsed.data.available,
           ...(parsed.data.price !== undefined
-            ? { priceOverride: String(parsed.data.price) }
+            ? { priceOverride: parsed.data.price }
             : {}),
           ...(parsed.data.categoryId !== undefined
             ? { categoryId: parsed.data.categoryId }
@@ -319,7 +317,7 @@ router.put(
         branchId,
         menuItemId: item.id,
         available: parsed.data.available,
-        priceOverride: parsed.data.price === undefined ? null : String(parsed.data.price),
+        priceOverride: parsed.data.price ?? null,
         categoryId: parsed.data.categoryId ?? null,
       });
     }
@@ -494,9 +492,9 @@ router.post(
             await tx
               .update(branchInventoryTable)
               .set({
-                quantity: String(nextQuantity),
+                quantity: nextQuantity,
                 ...(input.lowStockThreshold !== undefined
-                  ? { lowStockThreshold: String(input.lowStockThreshold) }
+                  ? { lowStockThreshold: input.lowStockThreshold }
                   : {}),
                 updatedAt: new Date(),
               })
@@ -509,8 +507,8 @@ router.post(
               .values({
                 branchId,
                 ingredientId: ingredient.id,
-                quantity: String(nextQuantity),
-                lowStockThreshold: String(input.lowStockThreshold ?? 0),
+                quantity: nextQuantity,
+                lowStockThreshold: input.lowStockThreshold ?? 0,
               })
               .returning()
           )[0];
@@ -520,7 +518,7 @@ router.post(
           branchId,
           ingredientId: ingredient.id,
           type: input.type,
-          quantityDelta: String(delta),
+          quantityDelta: delta,
           note: input.note.trim() || null,
           actorUserId: manager.id,
         })
