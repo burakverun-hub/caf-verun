@@ -15,7 +15,8 @@ export const appUsersTable = pgTable(
   "app_users",
   {
     id: serial("id").primaryKey(),
-    clerkUserId: text("clerk_user_id"),
+    legacyClerkUserId: text("clerk_user_id"),
+    firebaseUid: text("firebase_uid"),
     email: text("email").notNull(),
     fullName: text("full_name").notNull().default(""),
     role: appUserRoleEnum("role").notNull().default("customer"),
@@ -27,7 +28,8 @@ export const appUsersTable = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
   },
   (table) => [
-    uniqueIndex("app_users_clerk_id_unique").on(table.clerkUserId),
+    uniqueIndex("app_users_clerk_id_unique").on(table.legacyClerkUserId),
+    uniqueIndex("app_users_firebase_uid_unique").on(table.firebaseUid),
     uniqueIndex("app_users_email_unique").on(table.email),
     uniqueIndex("app_users_staff_code_unique").on(table.staffCode),
     index("app_users_branch_role_active_idx").on(table.branchId, table.role, table.active),

@@ -1,4 +1,3 @@
-import { clerkClient } from "@clerk/express";
 import { randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { and, desc, eq, ilike, ne, or } from "drizzle-orm";
@@ -171,31 +170,9 @@ router.post("/admin/staff", requireCafeUser(["admin"]), async (req, res): Promis
     .from(appUsersTable)
     .where(eq(appUsersTable.email, email))
     .limit(1);
-  if (existing && (existing.role !== "customer" || !existing.clerkUserId)) {
+  if (existing && existing.role !== "customer") {
     res.status(409).json({ error: "Bu e-posta için bir personel hesabı zaten var." });
     return;
-  }
-
-  let linkedClerkUserId = existing?.clerkUserId ?? null;
-  if (!linkedClerkUserId) {
-    const clerkUsers = await clerkClient.users.getUserList({ emailAddress: [email], limit: 1 });
-    const matchingClerkUser = clerkUsers.data[0];
-    if (matchingClerkUser) {
-      linkedClerkUserId = matchingClerkUser.id;
-    } else {
-      try {
-        await clerkClient.invitations.createInvitation({
-          emailAddress: email,
-          notify: true,
-        });
-      } catch (error) {
-        req.log.error({ err: error }, "Clerk staff invitation failed");
-        res.status(409).json({
-          error: "Davet gönderilemedi. E-posta adresini ve Clerk davet durumunu kontrol edin.",
-        });
-        return;
-      }
-    }
   }
 
   const saved = await db.transaction(async (tx) => {
@@ -204,11 +181,10 @@ router.post("/admin/staff", requireCafeUser(["admin"]), async (req, res): Promis
       const [updated] = await tx
         .update(appUsersTable)
         .set({
-          clerkUserId: linkedClerkUserId,
           fullName,
           role,
           branchId: parsed.data.branchId,
-          status: linkedClerkUserId ? "active" : "invited",
+          status: existing.firebaseUid ? "active" : "invited",
           active: true,
         })
         .where(eq(appUsersTable.id, existing.id))
@@ -218,12 +194,11 @@ router.post("/admin/staff", requireCafeUser(["admin"]), async (req, res): Promis
       const [created] = await tx
         .insert(appUsersTable)
         .values({
-          clerkUserId: linkedClerkUserId,
           email,
           fullName,
           role,
           branchId: parsed.data.branchId,
-          status: linkedClerkUserId ? "active" : "invited",
+          status: "invited",
         })
         .returning();
       user = created;

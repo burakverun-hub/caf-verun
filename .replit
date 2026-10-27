@@ -26,3 +26,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 ADMIN_BOOTSTRAP_EMAIL = "burak@verun.com"
+FIREBASE_PROJECT_ID = "cafeverun"

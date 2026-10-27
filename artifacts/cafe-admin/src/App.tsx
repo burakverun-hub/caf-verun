@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ClerkProvider, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
+  firebaseAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail,
+  signOut, updateProfile,
   getGetAuthMeQueryKey, getGetDashboardSummaryQueryKey, getListAdminBranchesQueryKey,
   getListAdminStaffQueryKey, getListAdminCategoriesQueryKey, getListAdminMenuItemsQueryKey,
   getListAdminIngredientsQueryKey, useGetAuthMe, useGetDashboardSummary,
@@ -12,7 +12,7 @@ import {
   useUpdateAdminCategory, useListAdminMenuItems, useCreateAdminMenuItem, useUpdateAdminMenuItem,
   useListAdminIngredients, useCreateAdminIngredient, useUpdateAdminIngredient,
 } from '@workspace/api-client-react';
-import type { Branch, BranchInput, BranchUpdate, StaffMember, StaffInput, StaffUpdate, MenuCategory, CategoryInput, CategoryUpdate, MenuItem, MenuItemInput, MenuItemUpdate, Ingredient, IngredientInput, IngredientUpdate, StaffRole, RecipeIngredientInput } from '@workspace/api-client-react';
+import type { Branch, BranchInput, BranchUpdate, StaffMember, StaffInput, StaffUpdate, MenuCategory, CategoryInput, CategoryUpdate, MenuItem, MenuItemInput, MenuItemUpdate, Ingredient, IngredientInput, IngredientUpdate, StaffRole, RecipeIngredientInput, FirebaseUser } from '@workspace/api-client-react';
 import { Route, Switch, Router as WouterRouter, Link, useLocation } from 'wouter';
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, BookOpen, Boxes,
@@ -24,34 +24,6 @@ import './index.css';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
-function stripBase(path: string) { return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path; }
-if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
-
-const appearance = {
-  theme: shadcn, cssLayerName: 'clerk',
-  options: { logoPlacement: 'inside' as const, logoLinkUrl: basePath || '/', logoImageUrl: `${window.location.origin}${basePath}/logo.svg` },
-  variables: {
-    colorPrimary: '#382216', colorForeground: '#382419', colorMutedForeground: '#806c58',
-    colorDanger: '#a04236', colorBackground: '#f8f3ea', colorInput: '#fcf9f3',
-    colorInputForeground: '#362418', colorNeutral: '#d7c8b5', fontFamily: 'DM Sans',
-    borderRadius: '3px',
-  },
-  elements: {
-    rootBox: 'w-full flex justify-center', cardBox: 'bg-[#f8f3ea] rounded-sm w-[440px] max-w-full overflow-hidden border border-[#d8c8b3]',
-    card: '!shadow-none !border-0 !bg-transparent !rounded-none', footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    headerTitle: 'text-[#382419] font-display', headerSubtitle: 'text-[#806c58]',
-    socialButtonsBlockButtonText: 'text-[#382419]', formFieldLabel: 'text-[#53402e]',
-    footerActionLink: 'text-[#725533]', footerActionText: 'text-[#806c58]', dividerText: 'text-[#806c58]',
-    identityPreviewEditButton: 'text-[#725533]', formFieldSuccessText: 'text-[#55704f]',
-    alertText: 'text-[#774f3a]', logoBox: 'mb-3', logoImage: 'max-h-14',
-    socialButtonsBlockButton: 'border-[#d7c8b5] bg-[#fcf9f3]', formButtonPrimary: 'bg-[#382216] hover:bg-[#51331f]',
-    formFieldInput: 'bg-[#fcf9f3] border-[#d7c8b5] text-[#362418]', footerAction: 'text-[#806c58]',
-    dividerLine: 'bg-[#ded3c3]', alert: 'border-[#c28b7e] bg-[#f7eee8]', otpCodeFieldInput: 'border-[#d7c8b5]',
-    formFieldRow: 'text-[#53402e]', main: 'text-[#382419]',
-  },
-};
 
 type DialogKind = 'branch' | 'staff' | 'category' | 'product' | 'ingredient';
 type AnyRecord = Branch | StaffMember | MenuCategory | MenuItem | Ingredient | null;
@@ -76,10 +48,80 @@ function LoadingState() { return <div className="space-y-3 rounded-sm border bor
 function ErrorState({ retry }: { retry: () => void }) { return <div className="flex flex-col items-center border border-[#d8c8b4] bg-[#f7f1e8] p-10 text-center"><AlertCircle className="mb-3 text-[#a04236]" size={22}/><h3 className="font-display text-xl text-[#432d1e]">Veriler yüklenemedi</h3><p className="mb-4 mt-1 text-xs text-[#917c64]">Bağlantıyı kontrol edip yeniden deneyin.</p><Button variant="soft" onClick={retry}>Yeniden dene</Button></div>; }
 function EmptyState({ title, text, action }: { title: string; text: string; action?: React.ReactNode }) { return <div className="flex min-h-48 flex-col items-center justify-center border border-dashed border-[#d5c6b3] bg-[#f5efe5] p-8 text-center"><span className="mb-3 grid h-11 w-11 place-items-center rounded-full border border-[#d4c3a9] text-[#997c52]"><Coffee size={18}/></span><h3 className="font-display text-xl text-[#432d1e]">{title}</h3><p className="mb-4 mt-1 max-w-sm text-xs text-[#917c64]">{text}</p>{action}</div>; }
 
-function SignInPage() {
-  return <div className="grain flex min-h-[100dvh] items-center justify-center bg-[#eee8dc] px-5 py-10"><div className="grid w-full max-w-5xl items-center gap-12 md:grid-cols-[1fr_440px]"><section className="max-w-md"><Link href="/" className="mb-10 inline-flex items-center gap-3"><img src={`${basePath}/brand/cafe-verun-logo.png`} className="h-14 w-14 object-contain mix-blend-multiply" alt="Café Verün"/><span className="font-mono text-[9px] uppercase tracking-[.15em] text-[#816849]">Yönetim masası</span></Link><p className="font-mono text-[9px] uppercase tracking-[.16em] text-[#957648]">Café Verün · ekip alanı</p><h1 className="mt-4 font-display text-6xl leading-[.98] tracking-[-.05em] text-[#332016]">Her şubenin<br/><em className="font-normal text-[#89653d]">ritmi burada.</em></h1><p className="mt-5 max-w-sm text-sm leading-7 text-[#6e5844]">Şubeleri, ekibi ve ortak ürün kataloğunu tek bir yerden yönetin.</p><div className="mt-9 flex items-center gap-3 border-t border-[#d4c6b5] pt-4 font-mono text-[9px] text-[#826e5b]"><Shield size={14}/> Yalnızca yetkili yöneticiler içindir</div></section><div className="page-enter"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`}/></div></div></div>;
+function AuthFrame({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return <div className="grain flex min-h-[100dvh] items-center justify-center bg-[#eee8dc] px-5 py-10"><div className="grid w-full max-w-5xl items-center gap-12 md:grid-cols-[1fr_440px]"><section className="max-w-md"><Link href="/" className="mb-10 inline-flex items-center gap-3"><img src={`${basePath}/brand/cafe-verun-logo.png`} className="h-14 w-14 object-contain mix-blend-multiply" alt="Café Verün"/><span className="font-mono text-[9px] uppercase tracking-[.15em] text-[#816849]">Yönetim masası</span></Link><p className="font-mono text-[9px] uppercase tracking-[.16em] text-[#957648]">Café Verün · ekip alanı</p><h1 className="mt-4 font-display text-6xl leading-[.98] tracking-[-.05em] text-[#332016]">Her şubenin<br/><em className="font-normal text-[#89653d]">ritmi burada.</em></h1><p className="mt-5 max-w-sm text-sm leading-7 text-[#6e5844]">Şubeleri, ekibi ve ortak ürün kataloğunu tek bir yerden yönetin.</p><div className="mt-9 flex items-center gap-3 border-t border-[#d4c6b5] pt-4 font-mono text-[9px] text-[#826e5b]"><Shield size={14}/> Yalnızca yetkili yöneticiler içindir</div></section><section className="page-enter border border-[#d8c8b3] bg-[#f8f3ea] p-6 sm:p-8"><p className="font-mono text-[8px] uppercase tracking-[.15em] text-[#957648]">Café Verün · güvenli giriş</p><h2 className="mt-2 font-display text-3xl text-[#382419]">{title}</h2><p className="mb-6 mt-2 text-xs leading-5 text-[#806c58]">{subtitle}</p>{children}</section></div></div>;
 }
-function SignUpPage() { return <div className="grain flex min-h-[100dvh] items-center justify-center bg-[#eee8dc] px-5 py-10"><div className="w-full max-w-5xl md:grid md:grid-cols-[1fr_440px] md:items-center md:gap-12"><section className="mb-8"><p className="font-mono text-[9px] uppercase tracking-[.16em] text-[#957648]">Café Verün · ekip alanı</p><h1 className="mt-3 font-display text-5xl text-[#332016]">Yeni bir başlangıç.</h1><p className="mt-3 text-sm text-[#6e5844]">Yönetici hesabı oluşturun.</p></section><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`}/></div></div>; }
+
+function firebaseMessage(error: unknown) {
+  const code = (error as { code?: string })?.code;
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'E-posta veya şifre hatalı.';
+  if (code === 'auth/email-already-in-use') return 'Bu e-posta adresiyle zaten bir hesap var.';
+  if (code === 'auth/weak-password') return 'Şifreniz en az 6 karakter olmalı.';
+  if (code === 'auth/invalid-email') return 'Geçerli bir e-posta adresi girin.';
+  if (code === 'auth/too-many-requests') return 'Çok fazla deneme yapıldı. Bir süre sonra tekrar deneyin.';
+  return 'İşlem tamamlanamadı. Bilgilerinizi kontrol edip yeniden deneyin.';
+}
+function SignInPage() {
+  const [, setLocation] = useLocation();
+  const [email, setEmail] = useState(''), [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
+  const [resetMode, setResetMode] = useState(false);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setBusy(true); setError(''); setNotice('');
+    try {
+      if (resetMode) {
+        await sendPasswordResetEmail(firebaseAuth, email.trim());
+        setNotice('Şifre yenileme bağlantısı e-posta adresinize gönderildi.');
+      } else {
+        const result = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+        if (!result.user.emailVerified) {
+          await sendEmailVerification(result.user);
+          await signOut(firebaseAuth);
+          setNotice('E-posta adresiniz henüz doğrulanmamış. Yeni doğrulama bağlantısı gönderdik; lütfen gelen kutunuzu kontrol edin.');
+        } else {
+          setLocation('/');
+        }
+      }
+    } catch (caught) { setError(firebaseMessage(caught)); }
+    finally { setBusy(false); }
+  }
+  return <AuthFrame title={resetMode ? 'Şifrenizi yenileyin.' : 'Yeniden hoş geldiniz.'} subtitle={resetMode ? 'E-posta adresinize güvenli bir yenileme bağlantısı göndereceğiz.' : 'Yönetim alanınıza e-posta ve şifrenizle giriş yapın.'}>
+    <form className="space-y-4" onSubmit={submit}>
+      <Field label="E-posta"><TextInput data-testid="input-email" autoComplete="email" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="isim@ornek.com"/></Field>
+      {!resetMode&&<Field label="Şifre"><TextInput data-testid="input-password" autoComplete="current-password" type="password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/></Field>}
+      {error&&<p role="alert" className="border border-[#e2cbbd] bg-[#f3e9df] px-3 py-2 text-xs text-[#a04236]">{error}</p>}
+      {notice&&<p role="status" className="border border-[#cad7c1] bg-[#e7eddf] px-3 py-2 text-xs leading-5 text-[#55704f]">{notice}</p>}
+      <Button type="submit" disabled={busy} className="w-full">{busy?'Lütfen bekleyin…':resetMode?'Yenileme bağlantısı gönder':'Giriş yap'}</Button>
+      <div className="flex justify-between text-[10px] text-[#725533]"><button type="button" data-testid="button-reset-password" onClick={()=>{setResetMode(!resetMode);setError('');setNotice('')}}>{resetMode?'Giriş ekranına dön':'Şifremi unuttum'}</button><Link href="/sign-up">Hesap oluştur</Link></div>
+    </form>
+  </AuthFrame>;
+}
+function SignUpPage() {
+  const [name, setName] = useState(''), [email, setEmail] = useState(''), [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [created, setCreated] = useState(false);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      const result = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      if (name.trim()) await updateProfile(result.user, { displayName: name.trim() });
+      await sendEmailVerification(result.user);
+      await signOut(firebaseAuth);
+      setCreated(true);
+    } catch (caught) { setError(firebaseMessage(caught)); }
+    finally { setBusy(false); }
+  }
+  return <AuthFrame title={created?'E-postanızı doğrulayın.':'Yeni bir başlangıç.'} subtitle={created?'Hesabınız oluşturuldu. Doğrulama bağlantısını açtıktan sonra giriş yapabilirsiniz.':'Personel hesabınız için ekip yönetiminin kaydettiği e-posta adresini kullanın.'}>
+    {created ? <div className="space-y-4"><p className="border border-[#cad7c1] bg-[#e7eddf] p-4 text-xs leading-6 text-[#55704f]">Doğrulama bağlantısını e-posta adresinize gönderdik. Bağlantıyı onayladıktan sonra giriş yapın; yönetici tarafından atanan rol ve şube erişimi hesabınız etkinleştiğinde tanımlanır.</p><Link href="/sign-in" className="inline-flex w-full justify-center bg-[#382216] px-4 py-3 text-[11px] font-semibold text-[#f5ecdd]">Giriş ekranına dön</Link></div> : <form className="space-y-4" onSubmit={submit}>
+      <Field label="Ad soyad"><TextInput data-testid="input-full-name" autoComplete="name" value={name} onChange={e=>setName(e.target.value)} placeholder="Adınız soyadınız"/></Field>
+      <Field label="E-posta"><TextInput data-testid="input-signup-email" autoComplete="email" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="isim@ornek.com"/></Field>
+      <Field label="Şifre"><TextInput data-testid="input-signup-password" autoComplete="new-password" type="password" minLength={6} required value={password} onChange={e=>setPassword(e.target.value)} placeholder="En az 6 karakter"/></Field>
+      <p className="border border-[#ded3c3] bg-[#f5efe5] p-3 text-[10px] leading-5 text-[#806c58]">Personel erişimi yalnızca yönetici tarafından bekleyen ekip kaydı oluşturulduysa ve bu e-posta ile hesap doğrulandıysa açılır. Hesap oluşturmak rol vermez.</p>
+      {error&&<p role="alert" className="text-xs text-[#a04236]">{error}</p>}
+      <Button type="submit" disabled={busy} className="w-full">{busy?'Hesap oluşturuluyor…':'Hesap oluştur ve doğrula'}</Button>
+      <p className="text-center text-[10px] text-[#806c58]">Zaten hesabınız var? <Link href="/sign-in" className="font-semibold text-[#725533]">Giriş yapın</Link></p>
+    </form>}
+  </AuthFrame>;
+}
 function Landing() { const [, setLocation] = useLocation(); return <main className="grain flex min-h-[100dvh] flex-col bg-[#eee8dc]"><header className="flex h-20 items-center justify-between border-b border-[#ded4c5] bg-[#f3eee5] px-6 md:px-12"><div className="flex items-center gap-3"><img src={`${basePath}/brand/cafe-verun-logo.png`} className="h-14 w-14 object-contain mix-blend-multiply" alt="Café Verün"/><div><strong className="font-display text-lg text-[#382419]">Café Verün</strong><p className="font-mono text-[8px] uppercase tracking-[.14em] text-[#806c58]">Yönetim masası</p></div></div><Button onClick={() => setLocation('/sign-in')}>Yönetici girişi <ArrowRight size={14}/></Button></header><section className="relative flex flex-1 items-center overflow-hidden bg-[#e5d6c1] px-7 py-16 md:px-[10vw]"><div className="pointer-events-none absolute -right-20 top-[-180px] h-[560px] w-[560px] rounded-full border border-[#8e715347] shadow-[0_0_0_32px_#8e715309,0_0_0_80px_#8e715306]"/><div className="relative z-10 max-w-xl"><p className="font-mono text-[9px] uppercase tracking-[.16em] text-[#957648]">Merkezi operasyon · 2022’den beri</p><h1 className="mt-6 font-display text-6xl leading-[.98] tracking-[-.055em] text-[#332016] md:text-8xl">İyi kahvenin<br/><em className="font-normal text-[#89653d]">arkasındaki</em><br/>iyi düzen.</h1><p className="mt-6 max-w-sm text-sm leading-7 text-[#6e5844]">Café Verün şubelerinin, ekiplerinin ve ürün dünyasının yönetim alanı.</p><Button className="mt-7" onClick={() => setLocation('/sign-in')}>Yönetici olarak giriş yap <ArrowRight size={15}/></Button></div><div className="absolute bottom-10 right-[12%] hidden rotate-3 text-right text-[#846d53] md:block"><img src={`${basePath}/brand/cafe-verun-logo.png`} alt="" className="w-64 opacity-90 mix-blend-multiply"/><p className="font-mono text-[8px] tracking-[.16em]">BİZİM HİKÂYEMİZ · 2022</p></div></section><footer className="flex items-center justify-between px-6 py-5 font-mono text-[8px] tracking-[.08em] text-[#826e5b] md:px-12"><span>CAFÉ VERÜN · MERKEZ OFİS</span><span>YETKİLİ PERSONEL İÇİN</span></footer></main>; }
 function AccessDenied({ retry }: { retry: () => void }) { const { signOut } = useClerk(); return <div className="grain flex min-h-[100dvh] items-center justify-center bg-[#eee8dc] p-6"><div className="max-w-md border border-[#d8c8b4] bg-[#f8f3ea] p-9 text-center shadow-lg"><span className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[#d6c5ab] text-[#89653d]"><Shield size={24}/></span><p className="mt-5 font-mono text-[9px] uppercase tracking-[.16em] text-[#957648]">Erişim kısıtlı</p><h1 className="mt-2 font-display text-4xl text-[#382419]">Bu alan size açık değil.</h1><p className="mt-3 text-xs leading-6 text-[#806c58]">Yönetici hesabı gereklidir. Hesap durumunuzu kontrol edin veya çıkış yapıp yetkili bir hesapla tekrar deneyin.</p><div className="mt-6 flex justify-center gap-2"><Button variant="soft" onClick={retry}>Tekrar kontrol et</Button><Button onClick={() => signOut({ redirectUrl: basePath || '/' })}>Çıkış yap <LogOut size={13}/></Button></div></div></div>; }
 

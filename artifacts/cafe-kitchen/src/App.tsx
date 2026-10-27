@@ -1,89 +1,32 @@
-import { ClerkProvider, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, ChefHat, CircleAlert, Clock3, LoaderCircle, LockKeyhole, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
-import { Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Redirect, Route, Router as WouterRouter, Switch } from 'wouter';
 import {
+  createUserWithEmailAndPassword,
+  firebaseAuth,
   getGetAuthMeQueryKey,
   getGetDashboardSummaryQueryKey,
   getListOrdersQueryKey,
+  onAuthStateChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
   useGetAuthMe,
   useGetDashboardSummary,
   useListOrders,
   useUpdateOrderStatus,
 } from '@workspace/api-client-react';
-import type { Order, OrderStatus, UserProfile } from '@workspace/api-client-react';
+import type { FirebaseUser, Order, OrderStatus, UserProfile } from '@workspace/api-client-react';
+import { useQueryClient as useQueryCache } from '@tanstack/react-query';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: true, staleTime: 4000 } },
 });
 
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
-}
-
-if (!clerkPubKey) {
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
-}
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: 'clerk',
-  options: {
-    logoPlacement: 'inside' as const,
-    logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: '#39251b',
-    colorForeground: '#34251c',
-    colorMutedForeground: '#806c58',
-    colorDanger: '#a04236',
-    colorBackground: '#f8f4ec',
-    colorInput: '#fcf9f3',
-    colorInputForeground: '#362418',
-    colorNeutral: '#d7c8b5',
-    fontFamily: "'DM Sans', sans-serif",
-    borderRadius: '3px',
-  },
-  elements: {
-    rootBox: 'w-full flex justify-center',
-    cardBox: 'bg-[#f8f4ec] border border-[#d8cebe] rounded-sm w-[440px] max-w-full overflow-hidden shadow-sm',
-    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    headerTitle: 'text-[#34251c] font-serif',
-    headerSubtitle: 'text-[#806c58]',
-    socialButtonsBlockButtonText: 'text-[#34251c]',
-    formFieldLabel: 'text-[#53402e]',
-    footerActionLink: 'text-[#785a34]',
-    footerActionText: 'text-[#806c58]',
-    dividerText: 'text-[#806c58]',
-    identityPreviewEditButton: 'text-[#785a34]',
-    formFieldSuccessText: 'text-[#54704e]',
-    alertText: 'text-[#8d4e3c]',
-    logoBox: 'rounded-sm',
-    logoImage: 'object-contain',
-    socialButtonsBlockButton: 'border-[#d7c8b5] bg-[#fcf9f3]',
-    formButtonPrimary: 'bg-[#39251b] text-[#f8f4ec]',
-    formFieldInput: 'border-[#d7c8b5] bg-[#fcf9f3] text-[#362418]',
-    footerAction: 'text-[#806c58]',
-    dividerLine: 'bg-[#ded3c3]',
-    alert: 'border-[#dfc0b2] bg-[#f0dfd7]',
-    otpCodeFieldInput: 'border-[#d7c8b5] bg-[#fcf9f3] text-[#362418]',
-    formFieldRow: 'text-[#53402e]',
-    main: 'text-[#34251c]',
-  },
-};
-
 const money = (value: number) => new Intl.NumberFormat('tr-TR', {
   style: 'currency', currency: 'TRY', maximumFractionDigits: 2,
 }).format(value);
@@ -110,9 +53,7 @@ function apiErrorMessage(error: unknown): string {
     const serverMessage = value.response?.data?.error ?? value.response?.data?.message ?? value.error;
     if (serverMessage) {
       const normalized = serverMessage.toLocaleLowerCase('tr-TR');
-      if (normalized.includes('stock') || normalized.includes('stok')) {
-        return `Yetersiz stok: ${serverMessage}`;
-      }
+      if (normalized.includes('stock') || normalized.includes('stok')) return `Yetersiz stok: ${serverMessage}`;
       if (normalized.includes('conflict') || normalized.includes('already') || normalized.includes('status')) {
         return `Sipariş başka bir işlemle değişmiş olabilir. Güncel durumu yenileyin. (${serverMessage})`;
       }
@@ -121,6 +62,25 @@ function apiErrorMessage(error: unknown): string {
     if (value.message) return value.message;
   }
   return 'Sipariş durumu değiştirilemedi. Stok veya güncel sipariş durumu nedeniyle işlem reddedilmiş olabilir.';
+}
+
+type AuthState = { user: FirebaseUser | null; loading: boolean };
+const AuthContext = createContext<AuthState>({ user: null, loading: true });
+const useAuthState = () => useContext(AuthContext);
+
+function FirebaseAuthProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<AuthState>({ user: null, loading: true });
+  const client = useQueryClient();
+  const previousUid = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => onAuthStateChanged(firebaseAuth, (user) => {
+    const uid = user?.uid ?? null;
+    if (previousUid.current !== undefined && previousUid.current !== uid) client.clear();
+    previousUid.current = uid;
+    setState({ user, loading: false });
+  }), [client]);
+
+  return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
 }
 
 function OrderTicket({ order, onAdvance, updating }: {
@@ -277,8 +237,8 @@ function KitchenBoard({ profile }: { profile: UserProfile }) {
 }
 
 function LogoutButton() {
-  const { signOut } = useClerk();
-  return <button type="button" className="signout" onClick={() => signOut({ redirectUrl: basePath || '/' })} data-testid="button-sign-out">Oturumu kapat</button>;
+  const logout = async () => { await signOut(firebaseAuth); };
+  return <button type="button" className="signout" onClick={logout} data-testid="button-sign-out">Oturumu kapat</button>;
 }
 
 function AuthLoading() {
@@ -289,14 +249,13 @@ function ProfileGate() {
   const authQuery = useGetAuthMe({
     query: { queryKey: getGetAuthMeQueryKey(), staleTime: 30000, refetchOnWindowFocus: true },
   });
-  const { signOut } = useClerk();
   if (authQuery.isLoading) return <AuthLoading />;
   if (authQuery.isError || !authQuery.data) {
     return <div className="access-page"><section className="access-card" role="alert">
       <span className="access-mark"><CircleAlert size={20} /></span><span className="eyebrow">HESAP DOĞRULANAMADI</span>
       <h1>Bir dakika.</h1><p className="error-copy">Çalışan profilinize ulaşılamadı. Oturumunuzu kontrol edip yeniden deneyin.</p>
       <button className="retry" onClick={() => authQuery.refetch()} data-testid="button-profile-retry"><RefreshCw size={13} /> Yeniden dene</button>
-      <button className="signout" onClick={() => signOut({ redirectUrl: basePath || '/' })} data-testid="button-profile-sign-out">Oturumu kapat</button>
+      <LogoutButton />
     </section></div>;
   }
   if (authQuery.data.role !== 'kitchen') {
@@ -304,7 +263,7 @@ function ProfileGate() {
       <span className="access-mark"><LockKeyhole size={20} /></span><span className="eyebrow">PERSONEL ERİŞİMİ</span>
       <h1>Bu ekran size açık değil.</h1>
       <p>Bu mutfak panosu yalnızca mutfak ekibi içindir. Hesabınızın rolü: <strong>{authQuery.data.role}</strong>.</p>
-      <button className="signout" onClick={() => signOut({ redirectUrl: basePath || '/' })} data-testid="button-denied-sign-out">Oturumu kapat</button>
+      <LogoutButton />
     </section></div>;
   }
   return <KitchenBoard profile={authQuery.data} />;
@@ -331,7 +290,7 @@ function StaffLanding() {
         <div className="access-card">
           <span className="access-mark"><ChefHat size={20} /></span>
           <span className="eyebrow">PERSONEL GİRİŞİ</span>
-          <h2 style={{ font: "500 27px 'Playfair Display',serif", color: '#3d291e', margin: '12px 0 7px' }}>Mutfak ekranına geçin</h2>
+          <h2 className="auth-card-title">Mutfak ekranına geçin</h2>
           <p>Devam etmek için Café Verün personel hesabınızla oturum açın.</p>
           <a className="action" href={`${basePath}/sign-in`} data-testid="link-staff-sign-in" style={{ marginTop: 12, textDecoration: 'none' }}>Giriş yap <LockKeyhole size={14} /></a>
         </div>
@@ -341,80 +300,188 @@ function StaffLanding() {
   </div>;
 }
 
-function HomeRoute() {
-  const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return <AuthLoading />;
-  return isSignedIn ? <ProfileGate /> : <StaffLanding />;
+function AuthFrame({ children, accountLabel = 'PERSONEL GİRİŞİ' }: { children: React.ReactNode; accountLabel?: string }) {
+  return <div className="kitchen-app">
+    <header className="topbar"><div className="brand"><img src={`${import.meta.env.BASE_URL}brand/cafe-verun-logo.png`} alt="Café Verün" /><span className="brand-divider" /><span className="brand-caption">{accountLabel}</span></div></header>
+    <main className="auth-page">
+      <section className="auth-copy"><span className="eyebrow">CAFÉ VERÜN · MUTFAK</span><h1>Ekibimize<br /><em>hoş geldiniz.</em></h1><p>Güvenli personel hesabınızla mutfak sipariş sırasına giriş yapın.</p></section>
+      <div className="auth-widget">{children}</div>
+    </main>
+  </div>;
+}
+
+function firebaseMessage(error: unknown): string {
+  const code = (error as { code?: string })?.code;
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') return 'E-posta veya şifre hatalı.';
+  if (code === 'auth/email-already-in-use') return 'Bu e-posta ile zaten bir hesap bulunuyor. Giriş yapmayı deneyin.';
+  if (code === 'auth/weak-password') return 'Şifreniz en az 6 karakter olmalı.';
+  if (code === 'auth/invalid-email') return 'Geçerli bir e-posta adresi girin.';
+  if (code === 'auth/too-many-requests') return 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.';
+  return 'İşlem tamamlanamadı. Bilgilerinizi kontrol edip yeniden deneyin.';
 }
 
 function SignInPage() {
-  return <div className="kitchen-app">
-    <header className="topbar"><div className="brand"><img src={`${import.meta.env.BASE_URL}brand/cafe-verun-logo.png`} alt="Café Verün" /><span className="brand-divider" /><span className="brand-caption">PERSONEL<br />GİRİŞİ</span></div></header>
-    <main className="auth-page"><section className="auth-copy"><span className="eyebrow">CAFÉ VERÜN · MUTFAK</span><h1>Ekibimize<br /><em>hoş geldiniz.</em></h1><p>Güvenli personel hesabınızla mutfak sipariş sırasına giriş yapın.</p></section>
-      <div className="auth-widget"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /></div>
-    </main>
-  </div>;
+  const { user } = useAuthState();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [unverified, setUnverified] = useState<FirebaseUser | null>(null);
+  const [resent, setResent] = useState(false);
+  useEffect(() => {
+    if (user?.emailVerified) setMessage('');
+  }, [user]);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setMessage(''); setBusy(true);
+    try {
+      const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      if (!credential.user.emailVerified) {
+        setUnverified(credential.user);
+        await sendEmailVerification(credential.user);
+        await signOut(firebaseAuth);
+        setMessage('E-posta adresiniz henüz doğrulanmamış. Yeni bir doğrulama bağlantısı gönderdik; lütfen e-postanızı doğruladıktan sonra giriş yapın.');
+      }
+    } catch (error) { setMessage(firebaseMessage(error)); }
+    finally { setBusy(false); }
+  };
+  const resend = async () => {
+    if (!unverified) return;
+    setBusy(true);
+    try {
+      await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      const current = firebaseAuth.currentUser;
+      if (current && !current.emailVerified) await sendEmailVerification(current);
+      await signOut(firebaseAuth);
+      setResent(true);
+      setMessage('Doğrulama bağlantısı yeniden gönderildi. E-postanızı doğruladıktan sonra giriş yapabilirsiniz.');
+    } catch (error) { setMessage(firebaseMessage(error)); }
+    finally { setBusy(false); }
+  };
+  return <AuthFrame><section className="auth-form-card">
+    <span className="access-mark"><LockKeyhole size={20} /></span><span className="eyebrow">PERSONEL GİRİŞİ</span>
+    <h2 className="auth-card-title">Mutfak ekranına geçin</h2>
+    <p>Yetkili personel hesabınızla oturum açın.</p>
+    <form onSubmit={submit} className="auth-form">
+      <label htmlFor="signin-email">E-posta</label><input id="signin-email" data-testid="input-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} />
+      <label htmlFor="signin-password">Şifre</label><input id="signin-password" data-testid="input-password" type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} />
+      {message && <p className="auth-message" role="status" data-testid="status-auth-message">{message}</p>}
+      <button className="action auth-submit" type="submit" disabled={busy} data-testid="button-sign-in">{busy ? <LoaderCircle size={14} className="spin" /> : <LockKeyhole size={14} />} Giriş yap</button>
+    </form>
+    {unverified && !resent && <button className="text-action" type="button" onClick={resend} disabled={busy}>Doğrulama e-postasını yeniden gönder</button>}
+    <a className="auth-link" href={`${basePath}/forgot-password`}>Şifremi unuttum</a>
+    <div className="auth-separator" />
+    <p className="auth-footnote">Personel hesabınız yok mu? <a href={`${basePath}/sign-up`}>Hesap oluşturun</a></p>
+  </section></AuthFrame>;
 }
 
 function SignUpPage() {
-  return <div className="kitchen-app">
-    <header className="topbar"><div className="brand"><img src={`${import.meta.env.BASE_URL}brand/cafe-verun-logo.png`} alt="Café Verün" /><span className="brand-divider" /><span className="brand-caption">PERSONEL<br />HESABI</span></div></header>
-    <main className="auth-page"><section className="auth-copy"><span className="eyebrow">CAFÉ VERÜN · PERSONEL</span><h1>Hesap<br /><em>oluşturma.</em></h1><p>Personel hesabı oluşturma işlemi kurumunuzun erişim politikasına tabidir.</p></section>
-      <div className="auth-widget"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></div>
-    </main>
-  </div>;
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [complete, setComplete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setMessage('');
+    try {
+      const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      if (name.trim()) await updateProfile(credential.user, { displayName: name.trim() });
+      await sendEmailVerification(credential.user);
+      await signOut(firebaseAuth);
+      setComplete(true);
+    } catch (error) { setMessage(firebaseMessage(error)); }
+    finally { setBusy(false); }
+  };
+  return <AuthFrame accountLabel={'PERSONEL\\nHESABI'}><section className="auth-form-card">
+    <span className="access-mark"><ChefHat size={20} /></span><span className="eyebrow">PERSONEL HESABI</span>
+    {complete ? <>
+      <h2 className="auth-card-title">E-postanızı doğrulayın</h2>
+      <p><strong>{email}</strong> adresine doğrulama bağlantısı gönderdik. Giriş yapmadan önce e-postanızı doğrulayın.</p>
+      <div className="auth-message" role="status">Personel rolünüz ve şube erişiminiz ancak aynı e-posta ile oluşturulmuş bekleyen personel kaydı varsa etkinleşir. Yönetici size bir personel kaydı oluşturmadıysa yöneticinizle görüşün.</div>
+      <a className="action auth-submit" href={`${basePath}/sign-in`}>Giriş sayfasına dön <LockKeyhole size={14} /></a>
+    </> : <>
+      <h2 className="auth-card-title">Personel hesabı oluştur</h2>
+      <p>Hesabınız, yöneticinizin oluşturduğu bekleyen personel kaydıyla aynı e-posta üzerinden eşleşir.</p>
+      <form onSubmit={submit} className="auth-form">
+        <label htmlFor="signup-name">Ad soyad</label><input id="signup-name" data-testid="input-name" autoComplete="name" value={name} onChange={event => setName(event.target.value)} />
+        <label htmlFor="signup-email">E-posta</label><input id="signup-email" data-testid="input-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} />
+        <label htmlFor="signup-password">Şifre</label><input id="signup-password" data-testid="input-password" type="password" autoComplete="new-password" minLength={6} required value={password} onChange={event => setPassword(event.target.value)} />
+        {message && <p className="auth-message" role="alert">{message}</p>}
+        <button className="action auth-submit" type="submit" disabled={busy} data-testid="button-sign-up">{busy ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />} Hesap oluştur</button>
+      </form>
+      <p className="auth-footnote">Zaten hesabınız var mı? <a href={`${basePath}/sign-in`}>Giriş yapın</a></p>
+    </>}
+  </section></AuthFrame>;
 }
 
-function UnknownRoute() {
-  const { isLoaded, isSignedIn } = useAuth();
-  if (!isLoaded) return <AuthLoading />;
-  return isSignedIn ? <Redirect to="/" /> : <Redirect to="/" />;
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setBusy(true); setMessage('');
+    try {
+      await sendPasswordResetEmail(firebaseAuth, email.trim());
+      setMessage('Şifre yenileme bağlantısı e-posta adresinize gönderildi.');
+    } catch (error) { setMessage(firebaseMessage(error)); }
+    finally { setBusy(false); }
+  };
+  return <AuthFrame><section className="auth-form-card">
+    <span className="access-mark"><LockKeyhole size={20} /></span><span className="eyebrow">HESAP GÜVENLİĞİ</span>
+    <h2 className="auth-card-title">Şifrenizi yenileyin</h2>
+    <p>Hesabınızla ilişkili e-posta adresine yenileme bağlantısı gönderelim.</p>
+    <form onSubmit={submit} className="auth-form">
+      <label htmlFor="reset-email">E-posta</label><input id="reset-email" data-testid="input-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} />
+      {message && <p className="auth-message" role="status">{message}</p>}
+      <button className="action auth-submit" type="submit" disabled={busy} data-testid="button-reset-password">{busy ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Bağlantı gönder</button>
+    </form>
+    <p className="auth-footnote"><a href={`${basePath}/sign-in`}>Giriş sayfasına dön</a></p>
+  </section></AuthFrame>;
 }
 
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const client = useQueryClient();
-  const prevUserIdRef = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) client.clear();
-      prevUserIdRef.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, client]);
-  return null;
+function AuthStatusPage() {
+  const { user, loading } = useAuthState();
+  if (loading) return <AuthLoading />;
+  if (!user) return <StaffLanding />;
+  if (!user.emailVerified) return <UnverifiedPage user={user} />;
+  return <ProfileGate />;
 }
 
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-  return <ClerkProvider
-    publishableKey={clerkPubKey}
-    proxyUrl={clerkProxyUrl}
-    appearance={clerkAppearance}
-    signInUrl={`${basePath}/sign-in`}
-    signUpUrl={`${basePath}/sign-up`}
-    localization={{
-      signIn: { start: { title: 'Tekrar hoş geldiniz', subtitle: 'Mutfak ekranına erişmek için giriş yapın' } },
-      signUp: { start: { title: 'Personel hesabı oluştur', subtitle: 'Café Verün ekibi için hesap oluşturun' } },
-    }}
-    routerPush={(to) => setLocation(stripBase(to))}
-    routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-  >
-    <QueryClientProvider client={queryClient}>
-      <ClerkQueryClientCacheInvalidator />
-      <Switch>
-        <Route path="/" component={HomeRoute} />
-        <Route path="/sign-in/*?" component={SignInPage} />
-        <Route path="/sign-up/*?" component={SignUpPage} />
-        <Route component={UnknownRoute} />
-      </Switch>
-    </QueryClientProvider>
-  </ClerkProvider>;
+function UnverifiedPage({ user }: { user: FirebaseUser }) {
+  const [message, setMessage] = useState('Bu hesap henüz doğrulanmadı. E-posta bağlantısını doğruladıktan sonra giriş yapabilirsiniz.');
+  const [busy, setBusy] = useState(false);
+  const resend = async () => {
+    setBusy(true);
+    try { await sendEmailVerification(user); setMessage('Doğrulama bağlantısı yeniden gönderildi.'); }
+    catch { setMessage('E-posta gönderilemedi. Biraz sonra yeniden deneyin.'); }
+    finally { setBusy(false); }
+  };
+  return <div className="access-page"><section className="access-card">
+    <span className="access-mark"><CircleAlert size={20} /></span><span className="eyebrow">E-POSTA DOĞRULAMASI</span>
+    <h1>E-postanızı doğrulayın.</h1><p>{message}</p>
+    <button className="action auth-submit" onClick={resend} disabled={busy} data-testid="button-resend-verification">{busy ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />} Bağlantıyı yeniden gönder</button>
+    <button className="signout" onClick={() => signOut(firebaseAuth)} data-testid="button-unverified-sign-out">Oturumu kapat</button>
+  </section></div>;
+}
+
+function UnknownRoute() { return <Redirect to="/" />; }
+
+function AppRoutes() {
+  return <Switch>
+    <Route path="/" component={AuthStatusPage} />
+    <Route path="/sign-in" component={SignInPage} />
+    <Route path="/sign-up" component={SignUpPage} />
+    <Route path="/forgot-password" component={ForgotPasswordPage} />
+    <Route component={UnknownRoute} />
+  </Switch>;
 }
 
 function App() {
-  return <WouterRouter base={basePath}><ClerkProviderWithRoutes /></WouterRouter>;
+  return <WouterRouter base={basePath}>
+    <QueryClientProvider client={queryClient}>
+      <FirebaseAuthProvider><AppRoutes /></FirebaseAuthProvider>
+    </QueryClientProvider>
+  </WouterRouter>;
 }
 
 export default App;

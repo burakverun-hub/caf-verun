@@ -1,8 +1,5 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { ClerkProvider, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
 import { Route, Switch, Link, useLocation, Router as WouterRouter } from 'wouter';
 import {
   AlertTriangle, ArrowDownRight, ArrowUpRight, Boxes, Check, ChevronRight, CircleDollarSign,
@@ -18,53 +15,24 @@ import {
   useListManagerInventory, useListManagerInventoryTransactions,
   useCreateManagerInventoryTransaction,
   useListManagerStaff,
+  firebaseAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail,
+  signOut, updateProfile,
 } from '@workspace/api-client-react';
-import type { BranchMenuItem, InventoryRecord, InventoryTransactionInputType } from '@workspace/api-client-react';
+import type { BranchMenuItem, FirebaseUser, InventoryRecord, InventoryTransactionInputType } from '@workspace/api-client-react';
 import { ErrorBoundary } from '@/components/error-boundary';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 20_000, refetchInterval: 60_000, refetchOnWindowFocus: true } },
 });
 
-const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 function stripBase(path: string) {
   return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
 }
-if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
-
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: 'clerk',
-  options: {
-    logoPlacement: 'inside' as const,
-    logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: '#382216', colorForeground: '#382419', colorMutedForeground: '#806c58',
-    colorDanger: '#a04236', colorBackground: '#f8f3ea', colorInput: '#fcf9f3',
-    colorInputForeground: '#362418', colorNeutral: '#d7c8b5', fontFamily: 'DM Sans',
-    borderRadius: '3px',
-  },
-  elements: {
-    rootBox: 'w-full flex justify-center',
-    cardBox: 'bg-[#f8f3ea] rounded-[3px] w-[440px] max-w-full overflow-hidden border border-[#d8c8b3]',
-    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    headerTitle: 'text-[#382419] font-serif', headerSubtitle: 'text-[#806c58]',
-    socialButtonsBlockButtonText: 'text-[#49321f]', formFieldLabel: 'text-[#59432d]',
-    footerActionLink: 'text-[#75552f]', footerActionText: 'text-[#806c58]',
-    dividerText: 'text-[#806c58]', identityPreviewEditButton: 'text-[#75552f]',
-    formFieldSuccessText: 'text-[#55704f]', alertText: 'text-[#774f3a]',
-    logoBox: 'rounded-sm', logoImage: 'object-contain', socialButtonsBlockButton: 'border-[#d7c8b5]',
-    formButtonPrimary: 'bg-[#382216] hover:bg-[#51331f] text-[#f5ecdd]',
-    formFieldInput: 'bg-[#fcf9f3] border-[#d7c8b5] text-[#362418]',
-    footerAction: 'text-[#806c58]', dividerLine: 'bg-[#ded3c3]', alert: 'bg-[#f8ece6]',
-    otpCodeFieldInput: 'bg-[#fcf9f3]', formFieldRow: 'text-[#59432d]', main: 'text-[#382419]',
-  },
-};
+type AuthState = { user: FirebaseUser | null; loaded: boolean };
+const AuthContext = createContext<AuthState>({ user: null, loaded: false });
+const useFirebaseAuth = () => useContext(AuthContext);
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 }).format(amount);

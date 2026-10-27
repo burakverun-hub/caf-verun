@@ -1,4 +1,3 @@
-import { clerkClient, getAuth } from "@clerk/express";
 import type { NextFunction, Request, Response } from "express";
 import { and, eq } from "drizzle-orm";
 import {
@@ -7,6 +6,11 @@ import {
   db,
   type AppUser,
 } from "@workspace/db";
+import {
+  FirebaseTokenError,
+  verifyFirebaseIdToken,
+  type FirebaseIdentity,
+} from "./firebaseToken";
 
 export type CafeRole = AppUser["role"];
 
@@ -19,9 +23,8 @@ export class CafeAuthError extends Error {
   }
 }
 
-function getFullName(firstName?: string | null, lastName?: string | null, email?: string): string {
-  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
-  return name || email?.split("@")[0] || "Café Verün müşterisi";
+function getFullName(name: string | null, email: string, existingName?: string): string {
+  return name || existingName?.trim() || email.split("@")[0] || "Café Verün müşterisi";
 }
 
 async function getAdminBootstrapRole(email: string): Promise<boolean> {
@@ -37,35 +40,48 @@ async function getAdminBootstrapRole(email: string): Promise<boolean> {
 }
 
 export async function ensureCafeUser(req: Request): Promise<AppUser> {
-  const { userId } = getAuth(req);
-  if (!userId) throw new CafeAuthError(401, "Giriş yapmanız gerekiyor.");
+  const authorization = req.get("authorization");
+  const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) throw new CafeAuthError(401, "Giriş yapmanız gerekiyor.");
 
-  const clerkUser = await clerkClient.users.getUser(userId);
-  const email =
-    clerkUser.primaryEmailAddress?.emailAddress?.trim().toLowerCase() ||
-    clerkUser.emailAddresses[0]?.emailAddress?.trim().toLowerCase();
-  if (!email) throw new CafeAuthError(403, "Hesabınızda doğrulanmış bir e-posta bulunamadı.");
+  let identity: FirebaseIdentity;
+  try {
+    identity = await verifyFirebaseIdToken(token);
+  } catch (error) {
+    if (error instanceof FirebaseTokenError) {
+      throw new CafeAuthError(error.status, error.message);
+    }
+    throw error;
+  }
 
-  const fullName = getFullName(clerkUser.firstName, clerkUser.lastName, email);
+  const { uid, email } = identity;
   const bootstrapAdmin = await getAdminBootstrapRole(email);
-  const [byClerkId] = await db
+  const [byFirebaseUid] = await db
     .select()
     .from(appUsersTable)
-    .where(eq(appUsersTable.clerkUserId, userId))
+    .where(eq(appUsersTable.firebaseUid, uid))
     .limit(1);
 
-  if (byClerkId) {
+  if (byFirebaseUid) {
+    const [emailOwner] = await db
+      .select({ id: appUsersTable.id })
+      .from(appUsersTable)
+      .where(eq(appUsersTable.email, email))
+      .limit(1);
+    if (emailOwner && emailOwner.id !== byFirebaseUid.id) {
+      throw new CafeAuthError(409, "Bu e-posta başka bir Café Verün hesabına bağlı.");
+    }
     const [updated] = await db
       .update(appUsersTable)
       .set({
         email,
-        fullName,
+        fullName: getFullName(identity.name, email, byFirebaseUid.fullName),
         status: "active",
         ...(bootstrapAdmin ? { role: "admin" as const } : {}),
       })
-      .where(eq(appUsersTable.id, byClerkId.id))
+      .where(eq(appUsersTable.id, byFirebaseUid.id))
       .returning();
-    return updated ?? byClerkId;
+    return updated ?? byFirebaseUid;
   }
 
   const [byEmail] = await db
@@ -75,14 +91,14 @@ export async function ensureCafeUser(req: Request): Promise<AppUser> {
     .limit(1);
 
   if (byEmail) {
-    if (byEmail.clerkUserId && byEmail.clerkUserId !== userId) {
+    if (byEmail.firebaseUid && byEmail.firebaseUid !== uid) {
       throw new CafeAuthError(409, "Bu e-posta başka bir Café Verün hesabına bağlı.");
     }
     const [linked] = await db
       .update(appUsersTable)
       .set({
-        clerkUserId: userId,
-        fullName,
+        firebaseUid: uid,
+        fullName: getFullName(identity.name, email, byEmail.fullName),
         status: "active",
         ...(bootstrapAdmin ? { role: "admin" as const } : {}),
       })
@@ -94,9 +110,9 @@ export async function ensureCafeUser(req: Request): Promise<AppUser> {
   const [created] = await db
     .insert(appUsersTable)
     .values({
-      clerkUserId: userId,
+      firebaseUid: uid,
       email,
-      fullName,
+      fullName: getFullName(identity.name, email),
       role: bootstrapAdmin ? "admin" : "customer",
       status: "active",
     })

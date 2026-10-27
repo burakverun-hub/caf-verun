@@ -1,18 +1,17 @@
-import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { ClerkProvider, SignIn, SignUp, useAuth, useClerk } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
+import { createContext, type FormEvent, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Redirect, Route, Switch, useLocation, useParams, Router as WouterRouter } from 'wouter';
 import {
-  ArrowLeft, ArrowRight, Check, Clock3, Coffee, LoaderCircle, MapPin, Minus, Plus, RefreshCw,
+  ArrowLeft, ArrowRight, Check, Clock3, Coffee, LoaderCircle, MapPin, Minus, Plus, RefreshCw, MailCheck,
 } from 'lucide-react';
 import {
   getGetAuthMeQueryKey, getGetOrderQueryKey, getHealthCheckQueryKey, getListBranchesQueryKey,
   getListCategoriesQueryKey, getListMenuQueryKey, getListOrdersQueryKey, useCreateOrder,
   useGetAuthMe, useGetOrder, useHealthCheck, useListBranches, useListCategories, useListMenu, useListOrders,
+  firebaseAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  sendEmailVerification, sendPasswordResetEmail, signOut, updateProfile,
 } from '@workspace/api-client-react';
-import type { Branch, BranchMenuItem, Order, OrderStatus } from '@workspace/api-client-react';
+import type { Branch, BranchMenuItem, Order, OrderStatus, FirebaseUser } from '@workspace/api-client-react';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient({
@@ -24,66 +23,28 @@ const statuses: Record<OrderStatus, string> = { pending: 'Sırada', preparing: '
 const statusOrder: OrderStatus[] = ['pending', 'preparing', 'ready', 'completed'];
 const formatTime = (value: string) => new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 
 function stripBase(path: string) {
   return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
 }
 
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: 'clerk',
-  options: {
-    logoPlacement: 'inside' as const,
-    logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: '#382216',
-    colorForeground: '#382519',
-    colorMutedForeground: '#806c58',
-    colorDanger: '#a04236',
-    colorBackground: '#f8f3ea',
-    colorInput: '#fcf9f3',
-    colorInputForeground: '#362418',
-    colorNeutral: '#d7c8b5',
-    fontFamily: 'DM Sans',
-    borderRadius: '3px',
-  },
-  elements: {
-    rootBox: 'w-full flex justify-center',
-    cardBox: 'bg-[#f8f3ea] rounded-sm w-[440px] max-w-full overflow-hidden border border-[#d8c8b3]',
-    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    headerTitle: 'text-[#382519] font-display',
-    headerSubtitle: 'text-[#806c58]',
-    socialButtonsBlockButtonText: 'text-[#382519]',
-    formFieldLabel: 'text-[#53402e]',
-    footerActionLink: 'text-[#75562e]',
-    footerActionText: 'text-[#806c58]',
-    dividerText: 'text-[#806c58]',
-    identityPreviewEditButton: 'text-[#75562e]',
-    formFieldSuccessText: 'text-[#55704f]',
-    alertText: 'text-[#8b3b31]',
-    logoBox: 'mb-2',
-    logoImage: 'object-contain',
-    socialButtonsBlockButton: 'border-[#d7c8b5] bg-[#fcf9f3] hover:bg-[#eee4d4]',
-    formButtonPrimary: 'bg-[#382216] hover:bg-[#51331f] text-[#f5ecdd] shadow-none',
-    formFieldInput: 'border-[#d7c8b5] bg-[#fcf9f3] text-[#362418]',
-    footerAction: 'text-[#806c58]',
-    dividerLine: 'bg-[#ded3c3]',
-    alert: 'bg-[#f5e8e3] border-[#d9b6ab]',
-    otpCodeFieldInput: 'border-[#d7c8b5] bg-[#fcf9f3] text-[#362418]',
-    formFieldRow: 'gap-1',
-    main: 'gap-5',
-  },
-};
+type AuthState = { isLoaded: boolean; user: FirebaseUser | null; isSignedIn: boolean };
+const AuthContext = createContext<AuthState>({ isLoaded: false, user: null, isSignedIn: false });
+const useAuth = () => useContext(AuthContext);
+function FirebaseAuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  useEffect(() => onAuthStateChanged(firebaseAuth, nextUser => {
+    setUser(nextUser);
+    setIsLoaded(true);
+  }), []);
+  return <AuthContext.Provider value={{ isLoaded, user, isSignedIn: Boolean(user?.emailVerified) }}>{children}</AuthContext.Provider>;
+}
 
 function AppShell({ children }: { children: ReactNode }) {
   const health = useHealthCheck({ query: { queryKey: getHealthCheckQueryKey() } });
   const auth = useAuth();
-  const { signOut } = useClerk();
+  const handleSignOut = () => signOut(firebaseAuth);
   const profileQuery = useGetAuthMe({
     query: { enabled: auth.isLoaded && Boolean(auth.isSignedIn), queryKey: getGetAuthMeQueryKey(), retry: false },
   });
@@ -98,7 +59,7 @@ function AppShell({ children }: { children: ReactNode }) {
         {auth.isLoaded && auth.isSignedIn && profile?.role === 'customer' && <>
           <Link href="/orders" className="nav-link" data-testid="link-orders">Siparişlerim</Link>
           <span className="nav-greeting">{profile.fullName}</span>
-          <button className="nav-signout" type="button" onClick={() => signOut({ redirectUrl: basePath || '/' })} data-testid="button-sign-out">Çıkış</button>
+          <button className="nav-signout" type="button" onClick={() => void handleSignOut()} data-testid="button-sign-out">Çıkış</button>
         </>}
         {auth.isLoaded && !auth.isSignedIn && <>
           <Link href="/sign-in" className="nav-link" data-testid="link-sign-in">Giriş yap</Link>
@@ -351,58 +312,120 @@ function TrackOrder() {
 }
 
 function SignInPage() {
-  return <div className="auth-page"><div className="auth-intro"><Link href="/" className="back-link"><ArrowLeft size={15} /> Café Verün’e dön</Link><span className="eyebrow">MAHALLEMİZDE YERİN HAZIR</span><h1>Kahve molana<br /><em>devam et.</em></h1><p>Siparişlerin ve sevdiğin şube burada seni bekliyor.</p></div><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /></div>;
+  return <AuthForm mode="sign-in" />;
 }
 function SignUpPage() {
-  return <div className="auth-page"><div className="auth-intro"><Link href="/" className="back-link"><ArrowLeft size={15} /> Café Verün’e dön</Link><span className="eyebrow">BİR FİNCANLIK YAKINLIK</span><h1>Mahallene<br /><em>katıl.</em></h1><p>Hesabını oluştur, şubeni seç ve ilk siparişini ver.</p></div><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></div>;
+  return <AuthForm mode="sign-up" />;
 }
 
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
+function ResetPasswordPage() {
+  return <AuthForm mode="reset" />;
+}
+
+function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'reset' }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [, setLocation] = useLocation();
+  const title = mode === 'sign-up' ? <>Mahallene<br /><em>katıl.</em></> : mode === 'reset' ? <>Şifreni<br /><em>yenile.</em></> : <>Kahve molana<br /><em>devam et.</em></>;
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setMessage('');
+    setError('');
+    setBusy(true);
+    try {
+      if (mode === 'reset') {
+        await sendPasswordResetEmail(firebaseAuth, email.trim());
+        setMessage('Şifre yenileme bağlantısı e-posta adresine gönderildi.');
+      } else if (mode === 'sign-up') {
+        const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+        if (fullName.trim()) await updateProfile(credential.user, { displayName: fullName.trim() });
+        await sendEmailVerification(credential.user);
+        await signOut(firebaseAuth);
+        setMessage('Hesabın oluşturuldu. Giriş yapmadan önce e-posta kutundaki doğrulama bağlantısına tıkla. Personel hesabın varsa, davet edildiğin aynı e-posta adresiyle kaydolmalısın.');
+      } else {
+        const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+        if (!credential.user.emailVerified) {
+          await sendEmailVerification(credential.user);
+          await signOut(firebaseAuth);
+          setMessage('E-posta adresin henüz doğrulanmamış. Yeni bir doğrulama bağlantısı gönderdik; hesabına erişmek için önce e-postanı doğrula.');
+          return;
+        }
+        setLocation('/');
+      }
+    } catch (cause) {
+      const code = (cause as { code?: string }).code ?? '';
+      const messages: Record<string, string> = {
+        'auth/email-already-in-use': 'Bu e-posta adresiyle bir hesap zaten var. Giriş yapmayı dene.',
+        'auth/invalid-email': 'Geçerli bir e-posta adresi yaz.',
+        'auth/invalid-credential': 'E-posta veya şifre hatalı.',
+        'auth/user-not-found': 'Bu e-posta adresiyle bir hesap bulunamadı.',
+        'auth/wrong-password': 'E-posta veya şifre hatalı.',
+        'auth/weak-password': 'Şifren en az 6 karakter olmalı.',
+        'auth/too-many-requests': 'Çok fazla deneme yapıldı. Biraz bekleyip yeniden dene.',
+        'auth/network-request-failed': 'Bağlantı kurulamadı. İnternetini kontrol edip yeniden dene.',
+      };
+      setError(messages[code] ?? 'İşlem tamamlanamadı. Bilgilerini kontrol edip yeniden dene.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <div className="auth-page">
+    <div className="auth-intro">
+      <Link href="/" className="back-link"><ArrowLeft size={15} /> Café Verün’e dön</Link>
+      <span className="eyebrow">{mode === 'sign-up' ? 'BİR FİNCANLIK YAKINLIK' : mode === 'reset' ? 'HESABINA YENİDEN ULAŞ' : 'MAHALLEMİZDE YERİN HAZIR'}</span>
+      <h1>{title}</h1>
+      <p>{mode === 'sign-up' ? 'Hesabını oluştur, şubeni seç ve ilk siparişini ver.' : mode === 'reset' ? 'E-posta adresine güvenli bir şifre yenileme bağlantısı gönderelim.' : 'Siparişlerin ve sevdiğin şube burada seni bekliyor.'}</p>
+    </div>
+    <form className="auth-card" onSubmit={submit}>
+      <div className="auth-card-heading"><span className="eyebrow">{mode === 'sign-up' ? 'YENİ MÜŞTERİ HESABI' : mode === 'reset' ? 'ŞİFRE YENİLEME' : 'HESABINA GİRİŞ YAP'}</span><h2>{mode === 'sign-up' ? 'Aramıza hoş geldin.' : mode === 'reset' ? 'Bağlantı gönderelim.' : 'Tekrar hoş geldin.'}</h2></div>
+      {mode === 'sign-up' && <><label className="field-label" htmlFor="auth-name">Adın soyadın</label><input id="auth-name" className="text-input" autoComplete="name" value={fullName} onChange={event => setFullName(event.target.value)} placeholder="Ad Soyad" data-testid="input-full-name" /></>}
+      <label className="field-label" htmlFor="auth-email">E-posta adresin</label>
+      <input id="auth-email" className="text-input" type="email" required autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="ornek@eposta.com" data-testid="input-email" />
+      {mode !== 'reset' && <><label className="field-label" htmlFor="auth-password">Şifren</label><input id="auth-password" className="text-input" type="password" required minLength={6} autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder="En az 6 karakter" data-testid="input-password" /></>}
+      {error && <p className="form-error" role="alert" data-testid="text-auth-error">{error}</p>}
+      {message && <div className="auth-message" role="status" data-testid="text-auth-message"><MailCheck size={18} /><span>{message}</span></div>}
+      <button className="button button-primary auth-submit" type="submit" disabled={busy} data-testid="button-auth-submit">{busy ? <><LoaderCircle size={15} className="spin" /> İşleniyor</> : mode === 'sign-up' ? 'Hesabını oluştur' : mode === 'reset' ? 'Bağlantı gönder' : 'Giriş yap'}{!busy && <ArrowRight size={15} />}</button>
+      {mode === 'sign-in' && <Link href="/reset-password" className="auth-secondary-link">Şifremi unuttum</Link>}
+      <div className="auth-switch">{mode === 'sign-up' ? <>Zaten hesabın var mı? <Link href="/sign-in">Giriş yap</Link></> : mode === 'reset' ? <>Şifreni hatırladın mı? <Link href="/sign-in">Giriş yap</Link></> : <>Henüz hesabın yok mu? <Link href="/sign-up">Üye ol</Link></>}</div>
+    </form>
+  </div>;
+}
+
+function FirebaseQueryClientCacheInvalidator() {
+  const { user, isLoaded } = useAuth();
   const client = useQueryClient();
   const prevUserIdRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) client.clear();
-      prevUserIdRef.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, client]);
+    if (!isLoaded) return;
+    const userId = user?.uid ?? null;
+    if (prevUserIdRef.current !== undefined && prevUserIdRef.current !== userId) client.clear();
+    prevUserIdRef.current = userId;
+  }, [client, isLoaded, user?.uid]);
   return null;
 }
 
-function ClerkRoutes() {
-  const [, setLocation] = useLocation();
-  return <ClerkProvider
-    publishableKey={clerkPubKey}
-    proxyUrl={clerkProxyUrl}
-    appearance={clerkAppearance}
-    signInUrl={`${basePath}/sign-in`}
-    signUpUrl={`${basePath}/sign-up`}
-    localization={{
-      signIn: { start: { title: 'Tekrar hoş geldin', subtitle: 'Siparişlerine ulaşmak için giriş yap.' } },
-      signUp: { start: { title: 'Café Verün’e katıl', subtitle: 'Müşteri hesabını oluştur.' } },
-    }}
-    routerPush={to => setLocation(stripBase(to))}
-    routerReplace={to => setLocation(stripBase(to), { replace: true })}
-  >
+function CafeRoutes() {
+  return <FirebaseAuthProvider>
     <QueryClientProvider client={queryClient}>
-      <ClerkQueryClientCacheInvalidator />
+      <FirebaseQueryClientCacheInvalidator />
       <AppShell><Switch>
         <Route path="/" component={CustomerHome} />
-        <Route path="/sign-in/*?" component={SignInPage} />
-        <Route path="/sign-up/*?" component={SignUpPage} />
+        <Route path="/sign-in" component={SignInPage} />
+        <Route path="/sign-up" component={SignUpPage} />
+        <Route path="/reset-password" component={ResetPasswordPage} />
         <Route path="/orders" component={CustomerOrders} />
         <Route path="/track/:id" component={TrackOrder} />
         <Route component={NotFound} />
       </Switch></AppShell>
     </QueryClientProvider>
-  </ClerkProvider>;
+  </FirebaseAuthProvider>;
 }
 
 function App() {
-  if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
-  return <WouterRouter base={basePath}><ClerkRoutes /></WouterRouter>;
+  return <WouterRouter base={basePath}><CafeRoutes /></WouterRouter>;
 }
 export default App;
