@@ -21,6 +21,12 @@ The user also wants Google sign-in available on every portal that supports email
 
 **How to apply:** expose the Google provider on the customer, kitchen, cashier, admin, and branch-manager sign-in/sign-up screens. Enable Google in Firebase Console and authorize the relevant domains before testing or publishing.
 
+The user confirmed the Google OAuth popup opens from the Replit preview after authorizing its domain; they did not sign in or test account creation or role routing.
+
+**Why:** this records what has actually been verified without overstating the auth test.
+
+**How to apply:** do not claim end-to-end Google sign-in or staff-role access is tested until a test account completes the flow.
+
 Admin authors shared master products and recipes, including separate customer-facing ingredient/allergen information and kitchen-only preparation instructions. Branch menus may differ: branch managers control their branch's assortment, local categories, and stock; they do not edit master recipes or other branches. Archive master products instead of deleting them so order history remains intact.
 
 **Why:** the user approved a shared admin-owned catalog with branch-specific menus, and branch managers need local control without changing master recipes or another branch's data.
