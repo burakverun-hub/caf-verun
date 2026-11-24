@@ -291,7 +291,8 @@ paths:
     post:
       operationId: createAdminStaff
       tags: [cafe]
-      summary: Create a staff account and send a sign-up invitation
+      summary: Create a pending staff profile
+      description: Creates or updates the local staff role and branch assignment. The staff member signs up with the same email and verifies it to activate access; no email invitation is sent by this endpoint.
       requestBody:
         required: true
         content:
@@ -299,7 +300,7 @@ paths:
             schema: { $ref: "#/components/schemas/StaffInput" }
       responses:
         "201":
-          description: Invited staff account
+          description: Pending staff profile
           content:
             application/json:
               schema: { $ref: "#/components/schemas/StaffMember" }

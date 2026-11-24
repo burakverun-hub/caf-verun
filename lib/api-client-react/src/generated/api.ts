@@ -1246,7 +1246,8 @@ export const getCreateAdminStaffUrl = () => {
 }
 
 /**
- * @summary Create a staff account and send a sign-up invitation
+ * Creates or updates the local staff role and branch assignment. The staff member signs up with the same email and verifies it to activate access; no email invitation is sent by this endpoint.
+ * @summary Create a pending staff profile
  */
 export const createAdminStaff = async (staffInput: StaffInput, options?: Parameters<typeof customFetch>[1]): Promise<StaffMember> => {
 
@@ -1312,7 +1313,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateAdminStaffMutationVariables = {data: BodyType<StaffInput>}
 
     /**
- * @summary Create a staff account and send a sign-up invitation
+ * @summary Create a pending staff profile
  */
 export const useCreateAdminStaff = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAdminStaff>>, TError,CreateAdminStaffMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

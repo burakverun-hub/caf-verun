@@ -345,7 +345,7 @@ function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'reset' }) {
         if (fullName.trim()) await updateProfile(credential.user, { displayName: fullName.trim() });
         await sendEmailVerification(credential.user);
         await signOut(firebaseAuth);
-        setMessage('Hesabın oluşturuldu. Giriş yapmadan önce e-posta kutundaki doğrulama bağlantısına tıkla. Personel hesabın varsa, davet edildiğin aynı e-posta adresiyle kaydolmalısın.');
+        setMessage('Hesabın oluşturuldu. Giriş yapmadan önce e-posta kutundaki doğrulama bağlantısına tıkla. Personelsen, yöneticinin ekip kaydında kullandığı aynı e-posta adresiyle kaydolmalısın.');
       } else {
         const credential = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
         if (!credential.user.emailVerified) {

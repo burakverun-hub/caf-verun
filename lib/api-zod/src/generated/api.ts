@@ -386,7 +386,8 @@ export const ListAdminStaffResponse = zod.array(ListAdminStaffResponseItem)
 
 
 /**
- * @summary Create a staff account and send a sign-up invitation
+ * Creates or updates the local staff role and branch assignment. The staff member signs up with the same email and verifies it to activate access; no email invitation is sent by this endpoint.
+ * @summary Create a pending staff profile
  */
 export const createAdminStaffBodyFullNameMin = 2;
 export const createAdminStaffBodyFullNameMax = 120;

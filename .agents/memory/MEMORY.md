@@ -1,1 +1,1 @@
-- [Café Verün site and catalog boundaries](cafe-verun-sites.md) — Keep five roles on separate sites; admin owns master recipes while branch managers control local assortments and stock.
+- [Café Verün access and catalog rules](cafe-verun-sites.md) — Keep five role-specific sites; Firebase authenticates users while PostgreSQL owns roles, branches, orders, catalog, and inventory.

@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&display=swap');
-@layer theme, base, clerk, components, utilities;
+@layer theme, base, components, utilities;
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -187,6 +187,13 @@ tr:last-child td { border-bottom:0; }
 .signin-kicker { color:#987b51;font:10px var(--app-font-mono);letter-spacing:.15em;text-transform:uppercase;margin-bottom:15px; }
 .signin-inner h2 { color:#392518;font:500 34px var(--app-font-serif);margin:0 0 8px; }
 .signin-inner p { color:#826e58;font-size:12px;margin:0 0 24px; }
+.auth-form { display:flex;flex-direction:column;gap:9px; }
+.auth-form label { display:block;margin-top:5px;color:#634c35;font:10px var(--app-font-mono);letter-spacing:.04em; }
+.auth-form input { display:block;width:100%;min-height:42px;padding:10px 12px;border:1px solid #d8c8b3;background:#fcf9f3;color:#392518;font:12px var(--app-font-sans); }
+.auth-form input:focus { outline:2px solid #987b5140;border-color:#987b51; }
+.auth-form .btn { width:100%;justify-content:center;margin-top:7px; }
+.auth-form [role="alert"] { color:#a04236;line-height:1.6; }
+.auth-form [role="status"] { color:#55704f;line-height:1.6; }
 .access-denied { min-height:100dvh;display:grid;place-items:center;padding:24px;background:#eee8dc; }
 .access-card { width:min(500px,100%);text-align:center;padding:46px;background:#f8f3ea;border:1px solid #d8c8b3; }
 .access-card h1 { font:500 40px var(--app-font-serif);margin:20px 0 8px; }

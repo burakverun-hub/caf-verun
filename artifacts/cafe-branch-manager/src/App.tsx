@@ -27,12 +27,18 @@ const queryClient = new QueryClient({
 });
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-function stripBase(path: string) {
-  return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
-}
 type AuthState = { user: FirebaseUser | null; loaded: boolean };
 const AuthContext = createContext<AuthState>({ user: null, loaded: false });
 const useFirebaseAuth = () => useContext(AuthContext);
+
+function FirebaseAuthProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<AuthState>({ user: null, loaded: false });
+  useEffect(
+    () => onAuthStateChanged(firebaseAuth, (user) => setState({ user, loaded: true })),
+    [],
+  );
+  return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
+}
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 2 }).format(amount);
@@ -64,8 +70,9 @@ function SignInLanding() {
         <button className="btn btn-primary" data-testid="button-open-signin" onClick={() => setLocation('/sign-in')}>
           Personel girişi <ChevronRight size={15} />
         </button>
+        <Link href="/sign-up" className="btn" style={{ marginTop: 10, justifyContent: 'center' }}>Personel hesabı oluştur</Link>
         <div style={{ marginTop: 24, color: '#9a866f', fontSize: 10, lineHeight: 1.7 }}>
-          Yalnızca yetkili şube sorumluları erişebilir. Hesap erişimi için Café Verün yöneticinizle görüşün.
+          Hesap, yöneticinizin atadığı e-posta adresiyle oluşturulmalıdır. Doğrulama sonrası şube yetkiniz etkinleşir.
         </div>
       </div>
     </section>
@@ -73,6 +80,38 @@ function SignInLanding() {
 }
 
 function SignInPage() {
+  const [, setLocation] = useLocation();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setMessage(''); setError('');
+    try {
+      if (resetMode) {
+        await sendPasswordResetEmail(firebaseAuth, email.trim());
+        setMessage('Şifre yenileme bağlantısı e-posta adresinize gönderildi.');
+      } else {
+        const result = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+        await result.user.reload();
+        const current = firebaseAuth.currentUser;
+        if (current && !current.emailVerified) {
+          await sendEmailVerification(current);
+          await signOut(firebaseAuth);
+          setMessage('E-posta adresiniz doğrulanmamış. Yeni bağlantıyı gönderdik; gelen kutunuzu kontrol edin.');
+        } else {
+          setLocation('/');
+        }
+      }
+    } catch {
+      setError('İşlem tamamlanamadı. E-posta ve şifrenizi kontrol edip tekrar deneyin.');
+    } finally {
+      setBusy(false);
+    }
+  }
   return <div className="sign-in-page">
     <section className="sign-in-story">
       <img className="sign-in-brand" src={`${basePath}/brand/cafe-verun-logo.png`} alt="Café Verün" />
@@ -80,23 +119,70 @@ function SignInPage() {
       <div className="sign-in-foot">CAFÉ VERÜN / ŞUBE SORUMLUSU</div>
     </section>
     <section className="sign-in-form"><div className="signin-inner">
-      <div className="signin-kicker">GÜVENLİ PERSONEL GİRİŞİ</div>
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+      <div className="signin-kicker">{resetMode ? 'ŞİFRE YENİLEME' : 'GÜVENLİ PERSONEL GİRİŞİ'}</div>
+      <h2>{resetMode ? 'Şifrenizi yenileyin.' : 'İyi ki geldiniz.'}</h2>
+      <p>{resetMode ? 'E-posta adresinize yenileme bağlantısı göndereceğiz.' : 'Yönetici tarafından atanan e-posta adresinizle giriş yapın.'}</p>
+      <form onSubmit={submit} className="auth-form">
+        <label htmlFor="manager-email">E-posta</label>
+        <input id="manager-email" data-testid="input-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} />
+        {!resetMode && <><label htmlFor="manager-password">Şifre</label><input id="manager-password" data-testid="input-password" type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} /></>}
+        {message && <p role="status">{message}</p>}
+        {error && <p role="alert">{error}</p>}
+        <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Lütfen bekleyin…' : resetMode ? 'Yenileme bağlantısı gönder' : 'Giriş yap'}</button>
+      </form>
+      <button className="btn" type="button" onClick={() => { setResetMode(!resetMode); setMessage(''); setError(''); }} style={{ marginTop: 10 }}>
+        {resetMode ? 'Giriş ekranına dön' : 'Şifremi unuttum'}
+      </button>
+      <p style={{ marginTop: 16, fontSize: 11 }}>Personel hesabınız yok mu? <Link href="/sign-up">Hesap oluşturun</Link></p>
     </div></section>
   </div>;
 }
 function SignUpPage() {
-  return <div className="sign-in-form"><div className="signin-inner"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></div></div>;
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError('');
+    try {
+      const result = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+      if (name.trim()) await updateProfile(result.user, { displayName: name.trim() });
+      await sendEmailVerification(result.user);
+      await signOut(firebaseAuth);
+      setCreated(true);
+    } catch {
+      setError('Hesap oluşturulamadı. E-posta adresini kontrol edin veya giriş yapmayı deneyin.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <div className="sign-in-page">
+    <section className="sign-in-story"><img className="sign-in-brand" src={`${basePath}/brand/cafe-verun-logo.png`} alt="Café Verün" /><div><div className="eyebrow">PERSONEL PORTALI</div><h1>Şubeniz,<br /><em>kontrolünüzde.</em></h1><p>Günlük operasyonlarınıza güvenle devam edin.</p></div><div className="sign-in-foot">CAFÉ VERÜN / ŞUBE SORUMLUSU</div></section>
+    <section className="sign-in-form"><div className="signin-inner">
+      <div className="signin-kicker">PERSONEL HESABI</div>
+      <h2>{created ? 'E-postanızı doğrulayın.' : 'Hesabınızı oluşturun.'}</h2>
+      {created ? <><p>Doğrulama bağlantısını e-posta adresinize gönderdik. Bağlantıyı açtıktan sonra giriş yapın; şube erişiminiz aynı e-posta ile eşleşen yönetici atamasına bağlıdır.</p><Link className="btn btn-primary" href="/sign-in">Giriş ekranına dön</Link></> : <form onSubmit={submit} className="auth-form">
+        <label htmlFor="manager-name">Ad soyad</label><input id="manager-name" autoComplete="name" value={name} onChange={event => setName(event.target.value)} />
+        <label htmlFor="manager-signup-email">E-posta</label><input id="manager-signup-email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} />
+        <label htmlFor="manager-signup-password">Şifre</label><input id="manager-signup-password" type="password" autoComplete="new-password" minLength={6} required value={password} onChange={event => setPassword(event.target.value)} />
+        <p>Hesap oluşturmak rol vermez. Şube erişimi için yöneticinin bu e-posta adresine atama yapması gerekir.</p>
+        {error && <p role="alert">{error}</p>}
+        <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Hesap oluşturuluyor…' : 'Hesap oluştur ve doğrula'}</button>
+      </form>}
+      {!created && <p style={{ marginTop: 16, fontSize: 11 }}>Zaten hesabınız var mı? <Link href="/sign-in">Giriş yapın</Link></p>}
+    </div></section>
+  </div>;
 }
 
 function AccessDenied() {
-  const { signOut } = useClerk();
   return <main className="access-denied"><section className="access-card">
     <ShieldAlert size={34} strokeWidth={1.4} color="#9b5948" />
     <div className="eyebrow" style={{ marginTop: 18 }}>ERİŞİM SINIRLI</div>
     <h1>Bu alan size açık değil.</h1>
     <p>Şube sorumlusu paneline yalnızca bu role atanmış personel erişebilir. Yetkiniz olduğunu düşünüyorsanız sistem yöneticinizle görüşün.</p>
-    <button className="btn" data-testid="button-denied-signout" onClick={() => signOut({ redirectUrl: basePath || '/' })}><LogOut size={14} /> Oturumu kapat</button>
+    <button className="btn" data-testid="button-denied-signout" onClick={() => void signOut(firebaseAuth)}><LogOut size={14} /> Oturumu kapat</button>
   </section></main>;
 }
 
@@ -109,7 +195,6 @@ function QueryError({ onRetry }: { onRetry: () => void }) {
 }
 
 function Sidebar({ name, email, branchName }: { name: string; email: string; branchName: string }) {
-  const { signOut } = useClerk();
   const [location] = useLocation();
   const nav = [
     { href: '/', label: 'Genel Bakış', icon: LayoutDashboard },
@@ -122,9 +207,9 @@ function Sidebar({ name, email, branchName }: { name: string; email: string; bra
     <div className="branch-chip"><small>Atanmış şube</small><strong data-testid="text-assigned-branch">{branchName}</strong></div>
     <div className="nav-label">Çalışma alanı</div>
     <nav className="nav-items">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} data-testid={`link-${label.toLocaleLowerCase('tr-TR').replaceAll(' ', '-')}`} className={`nav-link ${location === href ? 'active' : ''}`}><Icon size={16} strokeWidth={1.7} />{label}</Link>)}</nav>
-    <div className="side-bottom">
+      <div className="side-bottom">
       <div className="user-mini" data-testid="text-manager-name">{name}</div><div className="user-email">{email}</div>
-      <button className="signout" data-testid="button-signout" onClick={() => signOut({ redirectUrl: basePath || '/' })}><LogOut size={14} /> Oturumu kapat</button>
+      <button className="signout" data-testid="button-signout" onClick={() => void signOut(firebaseAuth)}><LogOut size={14} /> Oturumu kapat</button>
     </div>
   </aside>;
 }
@@ -311,10 +396,11 @@ function StaffPage() {
 }
 
 function ManagerPortal() {
-  const auth = useAuth();
-  const profile = useGetAuthMe({ query: { queryKey: getGetAuthMeQueryKey(), enabled: !!auth.isSignedIn && auth.isLoaded, retry: false, staleTime: 30_000, refetchInterval: 60_000 } });
-  if (!auth.isLoaded || (auth.isSignedIn && profile.isLoading)) return <LoadingScreen />;
-  if (!auth.isSignedIn) return <SignInLanding />;
+  const auth = useFirebaseAuth();
+  const isSignedIn = Boolean(auth.user?.emailVerified);
+  const profile = useGetAuthMe({ query: { queryKey: getGetAuthMeQueryKey(), enabled: isSignedIn && auth.loaded, retry: false, staleTime: 30_000, refetchInterval: 60_000 } });
+  if (!auth.loaded || (isSignedIn && profile.isLoading)) return <LoadingScreen />;
+  if (!isSignedIn) return <SignInLanding />;
   if (profile.isError || !profile.data) return <main className="access-denied"><section className="access-card"><ShieldAlert size={32} color="#9b5948" /><h1>Profilinize ulaşılamadı.</h1><p>Oturumunuzu yenileyip tekrar deneyin. Sorun sürerse sistem yöneticinizle görüşün.</p><button className="btn" onClick={() => void profile.refetch()}><RefreshCw size={14} /> Yeniden dene</button></section></main>;
   if (profile.data.role !== 'branch_manager') return <AccessDenied />;
   if (!profile.data.branchId || !profile.data.branchName) return <main className="access-denied"><section className="access-card"><AlertTriangle size={31} color="#9b5948" /><h1>Şube ataması eksik.</h1><p>Hesabınıza bağlı bir şube bulunamadı. Lütfen sistem yöneticinize başvurun.</p></section></main>;
@@ -334,17 +420,16 @@ function NotFound() {
 }
 
 function RouterContent() {
-  const { addListener } = useClerk();
   const cache = useQueryClient();
   useEffect(() => {
     let previousUser: string | null | undefined = undefined;
-    const unsubscribe = addListener(({ user }) => {
-      const currentUser = user?.id ?? null;
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      const currentUser = user?.uid ?? null;
       if (previousUser !== undefined && currentUser !== previousUser) cache.clear();
       previousUser = currentUser;
     });
     return () => unsubscribe();
-  }, [addListener, cache]);
+  }, [cache]);
   return <Switch>
     <Route path="/sign-in/*?" component={SignInPage} />
     <Route path="/sign-up/*?" component={SignUpPage} />
@@ -356,21 +441,13 @@ function RouterContent() {
   </Switch>;
 }
 
-function ClerkRoutes() {
-  const [, setLocation] = useLocation();
-  return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={clerkAppearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} localization={{
-    signIn: { start: { title: 'Tekrar hoş geldiniz', subtitle: 'Şube panelinize giriş yapın' } },
-    signUp: { start: { title: 'Personel hesabı', subtitle: 'Hesap oluşturma davet ile yapılır' } },
-  }} routerPush={(to) => setLocation(stripBase(to))} routerReplace={(to) => setLocation(stripBase(to), { replace: true })}>
-    <QueryClientProvider client={queryClient}><RouterContent /></QueryClientProvider>
-  </ClerkProvider>;
-}
-
 function App() {
   return <QueryClientProvider client={queryClient}>
-    <WouterRouter base={basePath}>
-      <ErrorBoundary><ClerkRoutes /></ErrorBoundary>
-    </WouterRouter>
+    <FirebaseAuthProvider>
+      <WouterRouter base={basePath}>
+        <ErrorBoundary><RouterContent /></ErrorBoundary>
+      </WouterRouter>
+    </FirebaseAuthProvider>
   </QueryClientProvider>;
 }
 
