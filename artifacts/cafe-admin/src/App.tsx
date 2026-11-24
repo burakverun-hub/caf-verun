@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import {
   firebaseAuth, onAuthStateChanged, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail,
+  signInWithGoogle, googleSignInErrorMessage,
   signOut, updateProfile,
   getGetAuthMeQueryKey, getGetDashboardSummaryQueryKey, getListAdminBranchesQueryKey,
   getListAdminStaffQueryKey, getListAdminCategoriesQueryKey, getListAdminMenuItemsQueryKey,
@@ -97,6 +98,19 @@ function SignInPage() {
     } catch (caught) { setError(firebaseMessage(caught)); }
     finally { setBusy(false); }
   }
+  async function signInGoogle() {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const result = await signInWithGoogle();
+      await result.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setNotice('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+      } else setLocation('/');
+    } catch (caught) { setError(googleSignInErrorMessage(caught)); }
+    finally { setBusy(false); }
+  }
   return <AuthFrame title={resetMode ? 'Şifrenizi yenileyin.' : 'Yeniden hoş geldiniz.'} subtitle={resetMode ? 'E-posta adresinize güvenli bir yenileme bağlantısı göndereceğiz.' : 'Yönetim alanınıza e-posta ve şifrenizle giriş yapın.'}>
     <form className="space-y-4" onSubmit={submit}>
       <Field label="E-posta"><TextInput data-testid="input-email" autoComplete="email" type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="isim@ornek.com"/></Field>
@@ -104,11 +118,13 @@ function SignInPage() {
       {error&&<p role="alert" className="border border-[#e2cbbd] bg-[#f3e9df] px-3 py-2 text-xs text-[#a04236]">{error}</p>}
       {notice&&<p role="status" className="border border-[#cad7c1] bg-[#e7eddf] px-3 py-2 text-xs leading-5 text-[#55704f]">{notice}</p>}
       <Button type="submit" disabled={busy} className="w-full">{busy?'Lütfen bekleyin…':resetMode?'Yenileme bağlantısı gönder':'Giriş yap'}</Button>
+      {!resetMode && <Button variant="soft" type="button" disabled={busy} className="w-full" onClick={() => void signInGoogle()}><span className="font-bold text-[#4285f4]">G</span> Google ile devam et</Button>}
       <div className="flex justify-between text-[10px] text-[#725533]"><button type="button" data-testid="button-reset-password" onClick={()=>{setResetMode(!resetMode);setError('');setNotice('')}}>{resetMode?'Giriş ekranına dön':'Şifremi unuttum'}</button><Link href="/sign-up">Hesap oluştur</Link></div>
     </form>
   </AuthFrame>;
 }
 function SignUpPage() {
+  const [, setLocation] = useLocation();
   const [name, setName] = useState(''), [email, setEmail] = useState(''), [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [created, setCreated] = useState(false);
   async function submit(event: React.FormEvent) {
@@ -122,6 +138,19 @@ function SignUpPage() {
     } catch (caught) { setError(firebaseMessage(caught)); }
     finally { setBusy(false); }
   }
+  async function signInGoogle() {
+    setBusy(true); setError('');
+    try {
+      const result = await signInWithGoogle();
+      await result.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setError('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+      } else setLocation('/');
+    } catch (caught) { setError(googleSignInErrorMessage(caught)); }
+    finally { setBusy(false); }
+  }
   return <AuthFrame title={created?'E-postanızı doğrulayın.':'Yeni bir başlangıç.'} subtitle={created?'Hesabınız oluşturuldu. Doğrulama bağlantısını açtıktan sonra giriş yapabilirsiniz.':'İlk yönetici hesabı sistemde tanımlı e-posta ile açılır; diğer personel hesapları yönetici kaydıyla eşleşir.'}>
     {created ? <div className="space-y-4"><p className="border border-[#cad7c1] bg-[#e7eddf] p-4 text-xs leading-6 text-[#55704f]">Doğrulama bağlantısını e-posta adresinize gönderdik. Bağlantıyı onayladıktan sonra giriş yapın; yönetici tarafından atanan rol ve şube erişimi hesabınız etkinleştiğinde tanımlanır.</p><Link href="/sign-in" className="inline-flex w-full justify-center bg-[#382216] px-4 py-3 text-[11px] font-semibold text-[#f5ecdd]">Giriş ekranına dön</Link></div> : <form className="space-y-4" onSubmit={submit}>
       <Field label="Ad soyad"><TextInput data-testid="input-full-name" autoComplete="name" value={name} onChange={e=>setName(e.target.value)} placeholder="Adınız soyadınız"/></Field>
@@ -130,6 +159,7 @@ function SignUpPage() {
       <p className="border border-[#ded3c3] bg-[#f5efe5] p-3 text-[10px] leading-5 text-[#806c58]">İlk yönetici hesabı sistemde tanımlı e-posta ile doğrulanır. Diğer personel rolleri yalnızca yönetici bekleyen ekip kaydı oluşturduğunda açılır; hesap oluşturmak tek başına rol vermez.</p>
       {error&&<p role="alert" className="text-xs text-[#a04236]">{error}</p>}
       <Button type="submit" disabled={busy} className="w-full">{busy?'Hesap oluşturuluyor…':'Hesap oluştur ve doğrula'}</Button>
+      <Button variant="soft" type="button" disabled={busy} className="w-full" onClick={() => void signInGoogle()}><span className="font-bold text-[#4285f4]">G</span> Google ile devam et</Button>
       <p className="text-center text-[10px] text-[#806c58]">Zaten hesabınız var? <Link href="/sign-in" className="font-semibold text-[#725533]">Giriş yapın</Link></p>
     </form>}
   </AuthFrame>;

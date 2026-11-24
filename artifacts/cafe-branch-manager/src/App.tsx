@@ -17,6 +17,7 @@ import {
   useListManagerStaff,
   firebaseAuth, onAuthStateChanged, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail,
+  signInWithGoogle, googleSignInErrorMessage,
   signOut, updateProfile,
 } from '@workspace/api-client-react';
 import type { BranchMenuItem, FirebaseUser, InventoryRecord, InventoryTransactionInputType } from '@workspace/api-client-react';
@@ -112,6 +113,22 @@ function SignInPage() {
       setBusy(false);
     }
   }
+  async function googleSignIn() {
+    setBusy(true); setMessage(''); setError('');
+    try {
+      const result = await signInWithGoogle();
+      await result.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setMessage('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+      } else setLocation('/');
+    } catch (caught) {
+      setError(googleSignInErrorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
   return <div className="sign-in-page">
     <section className="sign-in-story">
       <img className="sign-in-brand" src={`${basePath}/brand/cafe-verun-logo.png`} alt="Café Verün" />
@@ -130,6 +147,7 @@ function SignInPage() {
         {error && <p role="alert">{error}</p>}
         <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Lütfen bekleyin…' : resetMode ? 'Yenileme bağlantısı gönder' : 'Giriş yap'}</button>
       </form>
+      {!resetMode && <button className="btn" type="button" onClick={() => void googleSignIn()} disabled={busy} style={{ width: '100%', marginTop: 10, justifyContent: 'center' }}><span className="font-bold text-[#4285f4]">G</span> Google ile devam et</button>}
       <button className="btn" type="button" onClick={() => { setResetMode(!resetMode); setMessage(''); setError(''); }} style={{ marginTop: 10 }}>
         {resetMode ? 'Giriş ekranına dön' : 'Şifremi unuttum'}
       </button>
@@ -138,6 +156,7 @@ function SignInPage() {
   </div>;
 }
 function SignUpPage() {
+  const [, setLocation] = useLocation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -158,6 +177,22 @@ function SignUpPage() {
       setBusy(false);
     }
   }
+  async function googleSignIn() {
+    setBusy(true); setError('');
+    try {
+      const result = await signInWithGoogle();
+      await result.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setError('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+      } else setLocation('/');
+    } catch (caught) {
+      setError(googleSignInErrorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
   return <div className="sign-in-page">
     <section className="sign-in-story"><img className="sign-in-brand" src={`${basePath}/brand/cafe-verun-logo.png`} alt="Café Verün" /><div><div className="eyebrow">PERSONEL PORTALI</div><h1>Şubeniz,<br /><em>kontrolünüzde.</em></h1><p>Günlük operasyonlarınıza güvenle devam edin.</p></div><div className="sign-in-foot">CAFÉ VERÜN / ŞUBE SORUMLUSU</div></section>
     <section className="sign-in-form"><div className="signin-inner">
@@ -171,6 +206,7 @@ function SignUpPage() {
         {error && <p role="alert">{error}</p>}
         <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Hesap oluşturuluyor…' : 'Hesap oluştur ve doğrula'}</button>
       </form>}
+      {!created && <button className="btn" type="button" onClick={() => void googleSignIn()} disabled={busy} style={{ width: '100%', marginTop: 10, justifyContent: 'center' }}><span className="font-bold text-[#4285f4]">G</span> Google ile devam et</button>}
       {!created && <p style={{ marginTop: 16, fontSize: 11 }}>Zaten hesabınız var mı? <Link href="/sign-in">Giriş yapın</Link></p>}
     </div></section>
   </div>;

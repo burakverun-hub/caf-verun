@@ -12,6 +12,8 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  signInWithGoogle,
+  googleSignInErrorMessage,
   signOut,
   updateProfile,
   useGetAuthMe,
@@ -344,6 +346,21 @@ function SignInPage() {
     } catch (error) { setMessage(firebaseMessage(error)); }
     finally { setBusy(false); }
   };
+  const googleSignIn = async () => {
+    setBusy(true); setMessage('');
+    try {
+      const credential = await signInWithGoogle();
+      await credential.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setMessage('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+      } else {
+        window.location.assign(`${basePath}/`);
+      }
+    } catch (error) { setMessage(googleSignInErrorMessage(error)); }
+    finally { setBusy(false); }
+  };
   const resend = async () => {
     if (!unverified) return;
     setBusy(true);
@@ -367,6 +384,7 @@ function SignInPage() {
       {message && <p className="auth-message" role="status" data-testid="status-auth-message">{message}</p>}
       <button className="action auth-submit" type="submit" disabled={busy} data-testid="button-sign-in">{busy ? <LoaderCircle size={14} className="spin" /> : <LockKeyhole size={14} />} Giriş yap</button>
     </form>
+    <button className="action auth-submit" type="button" onClick={() => void googleSignIn()} disabled={busy}><span className="font-bold text-[#4285f4]">G</span> Google ile devam et</button>
     {unverified && !resent && <button className="text-action" type="button" onClick={resend} disabled={busy}>Doğrulama e-postasını yeniden gönder</button>}
     <a className="auth-link" href={`${basePath}/forgot-password`}>Şifremi unuttum</a>
     <div className="auth-separator" />
@@ -392,6 +410,21 @@ function SignUpPage() {
     } catch (error) { setMessage(firebaseMessage(error)); }
     finally { setBusy(false); }
   };
+  const googleSignIn = async () => {
+    setBusy(true); setMessage('');
+    try {
+      const credential = await signInWithGoogle();
+      await credential.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setMessage('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+      } else {
+        window.location.assign(`${basePath}/`);
+      }
+    } catch (error) { setMessage(googleSignInErrorMessage(error)); }
+    finally { setBusy(false); }
+  };
   return <AuthFrame accountLabel={'PERSONEL\\nHESABI'}><section className="auth-form-card">
     <span className="access-mark"><ChefHat size={20} /></span><span className="eyebrow">PERSONEL HESABI</span>
     {complete ? <>
@@ -409,6 +442,7 @@ function SignUpPage() {
         {message && <p className="auth-message" role="alert">{message}</p>}
         <button className="action auth-submit" type="submit" disabled={busy} data-testid="button-sign-up">{busy ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />} Hesap oluştur</button>
       </form>
+      <button className="action auth-submit" type="button" onClick={() => void googleSignIn()} disabled={busy}><span className="font-bold text-[#4285f4]">G</span> Google ile devam et</button>
       <p className="auth-footnote">Zaten hesabınız var mı? <a href={`${basePath}/sign-in`}>Giriş yapın</a></p>
     </>}
   </section></AuthFrame>;

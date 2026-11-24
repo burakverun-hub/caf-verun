@@ -10,6 +10,7 @@ import {
   useGetAuthMe, useGetOrder, useHealthCheck, useListBranches, useListCategories, useListMenu, useListOrders,
   firebaseAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   sendEmailVerification, sendPasswordResetEmail, signOut, updateProfile,
+  signInWithGoogle, googleSignInErrorMessage,
 } from '@workspace/api-client-react';
 import type { Branch, BranchMenuItem, Order, OrderStatus, FirebaseUser } from '@workspace/api-client-react';
 import NotFound from '@/pages/not-found';
@@ -373,6 +374,26 @@ function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'reset' }) {
       setBusy(false);
     }
   };
+  const handleGoogleSignIn = async () => {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const credential = await signInWithGoogle();
+      await credential.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setMessage('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+        return;
+      }
+      setLocation('/');
+    } catch (cause) {
+      setError(googleSignInErrorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
   return <div className="auth-page">
     <div className="auth-intro">
       <Link href="/" className="back-link"><ArrowLeft size={15} /> Café Verün’e dön</Link>
@@ -389,6 +410,7 @@ function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' | 'reset' }) {
       {error && <p className="form-error" role="alert" data-testid="text-auth-error">{error}</p>}
       {message && <div className="auth-message" role="status" data-testid="text-auth-message"><MailCheck size={18} /><span>{message}</span></div>}
       <button className="button button-primary auth-submit" type="submit" disabled={busy} data-testid="button-auth-submit">{busy ? <><LoaderCircle size={15} className="spin" /> İşleniyor</> : mode === 'sign-up' ? 'Hesabını oluştur' : mode === 'reset' ? 'Bağlantı gönder' : 'Giriş yap'}{!busy && <ArrowRight size={15} />}</button>
+      {mode !== 'reset' && <button className="mt-3 flex w-full items-center justify-center gap-3 border border-[#d8c8b3] bg-[#fcf9f3] px-3 py-3 text-xs font-semibold text-[#382216] transition hover:bg-[#eee3d0] disabled:opacity-60" type="button" onClick={() => void handleGoogleSignIn()} disabled={busy}><span aria-hidden="true" className="font-bold text-[#4285f4]">G</span> Google ile devam et</button>}
       {mode === 'sign-in' && <Link href="/reset-password" className="auth-secondary-link">Şifremi unuttum</Link>}
       <div className="auth-switch">{mode === 'sign-up' ? <>Zaten hesabın var mı? <Link href="/sign-in">Giriş yap</Link></> : mode === 'reset' ? <>Şifreni hatırladın mı? <Link href="/sign-in">Giriş yap</Link></> : <>Henüz hesabın yok mu? <Link href="/sign-up">Üye ol</Link></>}</div>
     </form>

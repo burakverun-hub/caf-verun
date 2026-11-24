@@ -8,6 +8,7 @@ import {
 import {
   firebaseAuth, onAuthStateChanged, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail,
+  signInWithGoogle, googleSignInErrorMessage,
   signOut, updateProfile,
   getGetAuthMeQueryKey, getGetDashboardSummaryQueryKey, getListCategoriesQueryKey,
   getListMenuQueryKey, getListOrdersQueryKey, useCreateOrder, useGetAuthMe,
@@ -90,6 +91,20 @@ function AuthPage({ mode }: { mode: AuthMode }) {
         'İşlem tamamlanamadı. Bilgilerinizi kontrol edip yeniden deneyin.');
     } finally { setBusy(false); }
   };
+  const googleSignIn = async () => {
+    setBusy(true); setError(''); setMessage('');
+    try {
+      const credential = await signInWithGoogle();
+      await credential.user.reload();
+      if (!firebaseAuth.currentUser?.emailVerified) {
+        if (firebaseAuth.currentUser) await sendEmailVerification(firebaseAuth.currentUser);
+        await signOut(firebaseAuth);
+        setMessage('Google e-posta adresiniz doğrulanmamış. Doğruladıktan sonra yeniden giriş yapın.');
+      } else navigate('/');
+    } catch (caught) {
+      setError(googleSignInErrorMessage(caught));
+    } finally { setBusy(false); }
+  };
   return <main className="auth-screen">
     <div className="auth-intro"><Link href="/" className="back-link">← Ana sayfaya dön</Link><span className="overline">PERSONEL HESABI</span><h1>{title}</h1>
       <p>{mode === 'sign-in' ? 'Personel hesabınızla giriş yapın. E-posta adresiniz doğrulanmış olmalıdır.' : mode === 'sign-up' ? 'Yönetici tarafından personel kaydı oluşturulduysa, aynı e-posta adresiyle kayıt olun ve doğrulayın.' : 'Hesabınıza bağlı e-posta adresinize parola yenileme bağlantısı gönderelim.'}</p></div>
@@ -100,6 +115,7 @@ function AuthPage({ mode }: { mode: AuthMode }) {
       {message && <p className="auth-feedback" role="status" data-testid="status-auth-message">{message}</p>}
       {error && <p className="auth-error" role="alert">{error}</p>}
       <button className="landing-cta auth-submit" disabled={busy} type="submit" data-testid="button-auth-submit">{busy ? 'İşleniyor…' : mode === 'sign-in' ? 'Giriş yap' : mode === 'sign-up' ? 'Hesap oluştur' : 'Bağlantı gönder'} <ArrowRight size={16} /></button>
+      {mode !== 'reset' && <button className="landing-cta auth-submit" disabled={busy} type="button" onClick={() => void googleSignIn()}><span className="font-bold text-[#4285f4]">G</span> Google ile devam et</button>}
       <nav className="auth-links">{mode !== 'sign-in' && <Link href="/sign-in">Giriş yap</Link>}{mode !== 'sign-up' && <Link href="/sign-up">Personel hesabı oluştur</Link>}{mode !== 'reset' && <Link href="/reset-password">Parolamı unuttum</Link>}</nav>
       {mode === 'sign-up' && <p className="auth-staff-note">Personel hesapları yönetici davetiyle değil, bekleyen personel kaydı ve aynı e-posta ile açılan doğrulanmış hesapla eşleşir.</p>}
     </form>
